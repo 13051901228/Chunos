@@ -18,14 +18,18 @@ LDPATH 		:= -ldietlibc -lm -lgcc -L./lib
 
 object 		= init test
 
-all: $(object)
-	cp $(object) $(RAMDISK)
+all: $(RAMDISK) $(object)
+
+$(RAMDISK):
+	@mkdir -p $(RAMDISK)
+	@mkdir -p $(OUT)
 
 $(object):%:%.c
 	@ $(CC) $(CCFLAG) -o $@ ./lib/_start.o ./lib/exit.o ./lib/lib.o $< $(LDFLAG) $(LDPATH)
+	@ cp $@ $(RAMDISK)
 	@ $(STRIP) -s $(RAMDISK)/$@
 	@ $(OBJDUMP) -D $@ > $(OUT)/$@.s
 
 .PHONY: clean
 clean:
-	@ rm $(object)
+	@ rm -f $(object)

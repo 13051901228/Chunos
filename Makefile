@@ -99,6 +99,9 @@ out/ramdisk.img: ramdisk/ application/genramdisk/genramdisk
 
 clean:
 	rm -rf $(OBJECT)
+	rm -f application/genramdisk/genramdisk
+	rm -rf ramdisk
+	cd application/diet-libc && make clean
 	@rm -rf out
 	@echo "All build has been cleaned"
 
