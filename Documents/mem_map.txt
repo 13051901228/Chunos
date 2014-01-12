@@ -1,0 +1,10 @@
+
+
+
+
+
+
+
+kernel	.
+4k	 kernel stack size.
+4096*4 = 16k pag table

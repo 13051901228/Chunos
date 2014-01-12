@@ -1,0 +1,89 @@
+ACPS (ARM Procedure Call Standard):ARM 程序调用标准
+
+arm程序调用标准有多个版本，这里主要讲述最常用的好象是ACPS32
+通过分析函数调用时的堆栈变化即可以看出规则的一些细节，现在我们
+以几个小程序来讲解下：
+
+（1）函数参数小于等于4个
+ARM调用时会使用r0-r3这四个寄存器来传递参数，如果参数大于四个的话
+多余的参数会被压入到栈中，在被调用的函数中，编译器还会把r0-r3这四个寄存器的
+值也压入到栈中。上程序：
+
+#include <stdio.h>
+
+int func(int a,int b)
+{
+	return a+b;
+}
+
+int main(int argc,char **argv)
+{
+	int a =5;
+	int b = 6;
+	int c;
+
+	c = func(a,b);
+
+	printf("%d\n",c);
+
+	return 0;
+}
+
+接着来分析下这两个函数的反汇编代码：
+
+000083ec <func>:
+    83ec:	e52db004 	push	{fp}		;---->因为在func中没有再调用其他的函数，所以只需要把fp（r11）压入堆栈
+    83f0:	e28db000 	add	fp, sp, #0
+    83f4:	e24dd00c 	sub	sp, sp, #12
+    83f8:	e50b0008 	str	r0, [fp, #-8]
+    83fc:	e50b100c 	str	r1, [fp, #-12]
+    8400:	e51b2008 	ldr	r2, [fp, #-8]
+    8404:	e51b300c 	ldr	r3, [fp, #-12]
+    8408:	e0823003 	add	r3, r2, r3
+    840c:	e1a00003 	mov	r0, r3
+    8410:	e28bd000 	add	sp, fp, #0
+    8414:	e8bd0800 	pop	{fp}
+    8418:	e12fff1e 	bx	lr
+
+0000841c <main>:
+    841c:	e92d4800 	push	{fp, lr}	---->把fp寄存器和函数返回地址压入堆栈(1)
+    8420:	e28db004 	add	fp, sp, #4	---->让fp寄存器指向栈帧的底部
+    8424:	e24dd018 	sub	sp, sp, #24	---->确定下一个栈帧即下一次调用时堆栈的底部位置(2)
+    8428:	e50b0018 	str	r0, [fp, #-24]	---->把main函数的第一个参数压入堆栈即argc
+    842c:	e50b101c 	str	r1, [fp, #-28]  ---->把main函数的第二个参数压入堆栈即argv
+    8430:	e3a03005 	mov	r3, #5		---->初始化函数地一个临时变量a	
+    8434:	e50b3010 	str	r3, [fp, #-16]
+    8438:	e3a03006 	mov	r3, #6		---->初始化函数第二个临时变量即b
+    843c:	e50b300c 	str	r3, [fp, #-12]
+    8440:	e51b0010 	ldr	r0, [fp, #-16]	---->接着把临时变量a加载到r0，作为传入func的第一个参数
+    8444:	e51b100c 	ldr	r1, [fp, #-12]	---->把临时变量b加载到r1，作为传入func的第二个参数
+    8448:	ebffffe7 	bl	83ec <func>
+    844c:	e1a03000 	mov	r3, r0		---->r0作为func的返回值，然后赋值给r3并存到临时变量c中
+    8450:	e50b3008 	str	r3, [fp, #-8]
+    8454:	e59f301c 	ldr	r3, [pc, #28]	---->下面的代码是调用printf的过程以及函数返回的过程，不再重复
+    8458:	e1a00003 	mov	r0, r3
+    845c:	e51b1008 	ldr	r1, [fp, #-8]
+    8460:	ebffffb1 	bl	832c <_init+0x48>
+    8464:	e3a03000 	mov	r3, #0
+    8468:	e1a00003 	mov	r0, r3
+    846c:	e24bd004 	sub	sp, fp, #4
+    8470:	e8bd4800 	pop	{fp, lr}
+    8474:	e12fff1e 	bx	lr
+    8478:	00008500 	andeq	r8, r0, r0, lsl #10
+Note：
+(1)ACPS中用r11来作为fp，
+(2)一般是临时变量+传入的参数+传递的参数(如果传入参数大于四个)
+以一幅图来表示经过main函数调用func之后堆栈的一个结构（图1）
+
+(2)函数参数多余4个(图2)
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,43 @@
+/*
+ *elf_size: the size of all elf section. at first we will 
+ *allocate elf_size to load all section of elf file;
+ *stack_size: max 4m, when fork only allocate 16k
+ */
+struct mm_struct{
+	int elf_size;		/*stack size + bin file size*/
+	int stack_size;		/*MAX 4M 16k when allocateed*/
+	u32 maped_stack:16;
+	u32 maped_elf:16;
+	struct list_head stack_list;
+
+	/*
+	 *bin file size will be changerd if executed another process
+	 */
+	struct list_head *list_curr;
+	int elf_page_curr;
+	struct list_head elf_list;
+}
+elf_size:进程文件的总共的大小，这里的大小值需要加载到内存中所有段的大小。在fork的时候
+不需要一次分配所有的内存，但是必须为这些内存腾出空间，方便以后扩展，另外，堆的内存也
+是根据这个内存的地址来确定的。
+
+stack_size:堆栈的大小，现在默认最大只能4m所以分配一个page_table,在fork的时候不分配4m
+的栈，只分配16kb。
+
+maped_stack
+maped_elf：
+这两个参数主要起辅助作用，在释放内存和添加新内存以及page table的时候会有用。
+
+stack_list:堆栈的page table链表。
+
+elf_list_cur:记录当前elf page table
+elf_page_curr:记录当前映射位置，主要方便找到elf下一个映射点
+
+elf_list:elf page table链表
+
+
+###################关于二级页表映射过程###########
+（1）把一级页表描述符设置成粗力度型的二级页表。
+（2）因为粗力度的二级页表以4k为映射单位，所以1m需要1k大小的二级页表
+（3）把二级页表中的每个条目设置成4k的小页，即表示一个条目对应4k大小的内存映射关系。
+（4）在把相应的权限以及属性设置好就行了。
