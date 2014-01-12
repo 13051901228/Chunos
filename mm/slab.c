@@ -233,7 +233,7 @@ static void *get_slab_from_page_free(int size, unsigned long flag)
 static void *get_kernel_slab(int size, unsigned long flag)
 {
 	int count;
-	unsigned long base,endp;
+	unsigned long base, endp;
 	struct page *pg;
 	int leave_size = 0;
 	struct slab_header *header;
@@ -244,12 +244,12 @@ static void *get_kernel_slab(int size, unsigned long flag)
 	}
 
 	if (is_aligin(size, PAGE_SIZE)) {
-		base = get_free_pages(page_nr(size), flag);
+		base = (unsigned long)get_free_pages(page_nr(size), flag);
 		if (!base)
 			return NULL;
 		pg = va_to_page(base);
 		set_page_extra_size(pg, 0);
-		return base;
+		return (void *)base;
 	}
 
 	size = get_new_alloc_size(size);

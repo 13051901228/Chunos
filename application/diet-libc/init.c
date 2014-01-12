@@ -19,6 +19,7 @@ int main(int argc, char **argv)
 	pid = fork();
 	if (pid == 0) {
 		while (1) {
+			pid = getpid();
 			printf("This is fater %d\n", pid);
 			delay(6000000);
 		}

@@ -156,14 +156,12 @@ struct elf_file *get_elf_info(struct file *file)
 		elf_file =NULL;
 	}
 
-	printk("---- 1 ----\n");
 go_out:
 	kfree(str);
 
 err_str_mem:
 	kfree(header);
 
-	printk("---- 2 ----\n");
 	return elf_file;
 }
 

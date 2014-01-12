@@ -60,6 +60,7 @@ $(boot_elf) : $(OBJECT) $(LDS)
 
 $(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD):
 	@mkdir -p $@
+	@mkdir -p ramdisk
 
 out/$(ARCH)/arch_ramdisk.o: arch/$(ARCH)/kernel/arch_ramdisk.S $(INCLUDE_DIR) out/ramdisk.img
 	$(CC) $(CCFLAG) -c $< -o $@
