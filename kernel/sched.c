@@ -415,9 +415,7 @@ static struct task_struct *find_next_run_task(void)
 
 	/* if there only one task need to sched return itself */
 	if (i == (MAX_PRIO - 1)) {
-		if (in_interrupt) {
 			return current;
-		}
 	}
 
 	task_head = &os_sched_table[i].list;

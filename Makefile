@@ -20,6 +20,7 @@ OUT_KERNEL 	= $(OUT)/kernel
 OUT_ARCH 	= $(OUT)/$(ARCH)
 OUT_PLATFORM 	= $(OUT)/$(PLATFORM)
 OUT_BOARD 	= $(OUT)/$(BOARD)
+OUT_FS		= $(OUT)/fs
 
 boot_elf 	:= $(OUT)/boot.elf
 boot_bin 	:= $(OUT)/boot.bin
@@ -32,8 +33,9 @@ SRC_PLATFORM_C	:= $(wildcard arch/$(ARCH)/platform/$(PLATFORM)/*.c)
 SRC_PLATFORM_S	:= $(wildcard arch/$(ARCH)/platform/$(PLATFORM)/*.S)
 SRC_BOARD_C	:= $(wildcard arch/$(ARCH)/board/$(BOARD)/*.c)
 SRC_BOARD_S	:= $(wildcard arch/$(ARCH)/board/$(BOARD)/*.S)
+SRC_FS		:= $(wildcard fs/*.c fs/lmfs/*.c)
 
-VPATH		:= kernel:mm:init:arch/$(ARCH)/platform/$(PLATFORM):arch/$(ARCH)/board/$(BOARD):arch/$(ARCH)/kernel
+VPATH		:= kernel:mm:init:fs:arch/$(ARCH)/platform/$(PLATFORM):arch/$(ARCH)/board/$(BOARD):arch/$(ARCH)/kernel
 
 .SUFFIXES:
 .SUFFIXES: .S .c
@@ -46,10 +48,11 @@ OBJ_PLATFORM	+= $(addprefix $(OUT_PLATFORM)/, $(patsubst %.c,%.o, $(notdir $(SRC
 OBJ_PLATFORM	+= $(addprefix $(OUT_PLATFORM)/, $(patsubst %.S,%.o, $(notdir $(SRC_PLATFORM_S))))
 OBJ_BOARD	+= $(addprefix $(OUT_BOARD)/, $(patsubst %.c,%.o, $(notdir $(SRC_BOARD_C))))
 OBJ_BOARD	+= $(addprefix $(OUT_BOARD)/, $(patsubst %.S,%.o, $(notdir $(SRC_BOARD_S))))
+OBJ_FS		+= $(addprefix $(OUT_FS)/, $(patsubst %.c,%.o, $(notdir $(SRC_FS))))
 
-OBJECT		= $(OUT_ARCH)/boot.o $(OBJ_ARCH) $(OBJ_PLATFORM) $(OBJ_BOARD) $(OBJ_KERNEL)
+OBJECT		= $(OUT_ARCH)/boot.o $(OBJ_ARCH) $(OBJ_PLATFORM) $(OBJ_BOARD) $(OBJ_KERNEL) $(OBJ_FS)
 
-all: $(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD) $(boot_bin)
+all: $(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD) $(OUT_FS) $(boot_bin)
 
 $(boot_bin) : $(boot_elf)
 	$(OBJ_COPY) -O binary $(boot_elf) $(boot_bin)
@@ -58,7 +61,8 @@ $(boot_bin) : $(boot_elf)
 $(boot_elf) : $(OBJECT) $(LDS)
 	$(LD) $(LDFLAG) -o $(boot_elf) $(OBJECT) $(LDPATH)
 
-$(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD):
+$(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD) $(OUT_FS):
+	@echo $@
 	@mkdir -p $@
 	@mkdir -p ramdisk
 
@@ -77,6 +81,9 @@ $(OUT_ARCH)/%.o: %.S $(INCLUDE_DIR) arch/$(ARCH)/kernel/include/*.h
 $(OUT_KERNEL)/%.o: %.c $(INCLUDE_DIR)
 	$(CC) $(CCFLAG) -c $< -o $@
 
+$(OUT_FS)/%.o: %.c $(INCLUDE_DIR)
+	$(CC) $(CCFLAG) -c $< -o $@
+
 $(OUT_PLATFORM)/%.o : %.c $(INCLUDE_DIR) arch/$(ARCH)/platform/$(PLATFORM)/include/*.h
 	$(CC) $(CCFLAG) -c $< -o $@
 
@@ -89,17 +96,17 @@ $(OUT_BOARD)/%.o : %.c $(INCLUDE_DIR)
 $(OUT_BOARD)/%.o : %.S $(INCLUDE_DIR) 
 	$(CC) $(CCFLAG) -c $< -o $@
 
-application/genramdisk/genramdisk: application/genramdisk/genramdisk.c
-	gcc -o application/genramdisk/genramdisk application/genramdisk/genramdisk.c
+application/mklmfs/mklmfs: application/mklmfs/mklmfs.c
+	gcc -o application/mklmfs/mklmfs application/mklmfs/mklmfs.c
 
-out/ramdisk.img: ramdisk/ application/genramdisk/genramdisk
-	./application/genramdisk/genramdisk ramdisk out/ramdisk.img
+out/ramdisk.img: ramdisk/ application/mklmfs/mklmfs
+	./application/mklmfs/mklmfs ramdisk out/ramdisk.img
 
 .PHONY: clean run app
 
 clean:
 	rm -rf $(OBJECT)
-	rm -f application/genramdisk/genramdisk
+	rm -f application/mklmfs/mklmfs
 	rm -rf ramdisk
 	cd application/diet-libc && make clean
 	@rm -rf out

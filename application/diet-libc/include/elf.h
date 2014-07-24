@@ -527,25 +527,47 @@ typedef struct
 
 /* Legal values for p_type (segment type).  */
 
-#define	PT_NULL		0		/* Program header table entry unused */
-#define PT_LOAD		1		/* Loadable program segment */
-#define PT_DYNAMIC	2		/* Dynamic linking information */
-#define PT_INTERP	3		/* Program interpreter */
-#define PT_NOTE		4		/* Auxiliary information */
-#define PT_SHLIB	5		/* Reserved */
-#define PT_PHDR		6		/* Entry for header table itself */
-#define PT_TLS		7		/* Thread-local storage segment */
-#define	PT_NUM		8		/* Number of defined types */
-#define PT_LOOS		0x60000000	/* Start of OS-specific */
-#define PT_GNU_EH_FRAME	0x6474e550	/* GCC .eh_frame_hdr segment */
-#define PT_GNU_STACK	0x6474e551	/* Indicates stack executability */
-#define PT_LOSUNW	0x6ffffffa
-#define PT_SUNWBSS	0x6ffffffa	/* Sun Specific segment */
-#define PT_SUNWSTACK	0x6ffffffb	/* Stack segment */
-#define PT_HISUNW	0x6fffffff
-#define PT_HIOS		0x6fffffff	/* End of OS-specific */
-#define PT_LOPROC	0x70000000	/* Start of processor-specific */
-#define PT_HIPROC	0x7fffffff	/* End of processor-specific */
+enum {
+  PT_NULL = 0,			/* Program header table entry unused */
+  PT_LOAD = 1,			/* Loadable program segment */
+  PT_DYNAMIC = 2,		/* Dynamic linking information */
+  PT_INTERP = 3,		/* Program interpreter */
+  PT_NOTE = 4,			/* Auxiliary information */
+  PT_SHLIB = 5,			/* Reserved */
+  PT_PHDR = 6,			/* Entry for header table itself */
+  PT_TLS = 7,			/* Thread-local storage segment */
+  PT_NUM = 8,			/* Number of defined types */
+  PT_LOOS = 0x60000000,		/* Start of OS-specific */
+  PT_GNU_EH_FRAME = 0x6474e550,	/* GCC .eh_frame_hdr segment */
+  PT_GNU_STACK = 0x6474e551,	/* Indicates stack executability */
+  PT_LOSUNW = 0x6ffffffa,
+  PT_SUNWBSS = 0x6ffffffa,	/* Sun Specific segment */
+  PT_SUNWSTACK = 0x6ffffffb,	/* Stack segment */
+  PT_HISUNW = 0x6fffffff,
+  PT_HIOS = 0x6fffffff,		/* End of OS-specific */
+  PT_LOPROC = 0x70000000,	/* Start of processor-specific */
+  PT_HIPROC = 0x7fffffff	/* End of processor-specific */
+};
+
+#define PT_NULL PT_NULL
+#define PT_LOAD PT_LOAD
+#define PT_DYNAMIC PT_DYNAMIC
+#define PT_INTERP PT_INTERP
+#define PT_NOTE PT_NOTE
+#define PT_SHLIB PT_SHLIB
+#define PT_PHDR PT_PHDR
+#define PT_TLS PT_TLS
+#define PT_NUM PT_NUM
+#define PT_LOOS PT_LOOS
+#define PT_GNU_EH_FRAME PT_GNU_EH_FRAME
+#define PT_GNU_STACK PT_GNU_STACK
+#define PT_LOSUNW PT_LOSUNW
+#define PT_SUNWBSS PT_SUNWBSS
+#define PT_SUNWSTACK PT_SUNWSTACK
+#define PT_HISUNW PT_HISUNW
+#define PT_HIOS PT_HIOS
+#define PT_LOPROC PT_LOPROC
+#define PT_HIPROC PT_HIPROC
 
 /* Legal values for p_flags (segment flags).  */
 
@@ -670,6 +692,9 @@ typedef struct
    If any adjustment is made to the ELF object after it has been
    built these entries will need to be adjusted.  */
 #define DT_ADDRRNGLO	0x6ffffe00
+#define DT_GNU_HASH	0x6ffffe05
+#define DT_TLSDESC_PLT	0x6ffffe06
+#define DT_TLSDESC_GOT	0x6ffffe07
 #define DT_GNU_CONFLICT	0x6ffffef8	/* Start of conflict section */
 #define DT_GNU_LIBLIST	0x6ffffef9	/* Library list */
 #define DT_CONFIG	0x6ffffefa	/* Configuration information.  */
@@ -2075,6 +2100,7 @@ typedef Elf32_Addr Elf32_Conflict;
 #define EF_ARM_EABI_UNKNOWN  0x00000000
 #define EF_ARM_EABI_VER1     0x01000000
 #define EF_ARM_EABI_VER2     0x02000000
+#define EF_ARM_EABI_VER4     0x04000000
 
 /* Additional symbol types for Thumb */
 #define STT_ARM_TFUNC      0xd

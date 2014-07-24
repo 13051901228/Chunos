@@ -24,8 +24,9 @@ _syscall_handler:
 	ldr r3, [r8, #20]	@ arg5
 	str r3, [sp, #4]
 
-	ldr r3, [r8, #24]	@arg6
-	str r3, [sp, #8]
+	/* dietlibc supoort to max 6 arg */
+	@ldr r3, [r8, #24]	@arg6
+	@str r3, [sp, #8]
 
 	ldr r0, [r8]		@ arg0
 	ldr r1, [r8, #4]	@ arg1
@@ -39,6 +40,7 @@ _syscall_handler:
 	add r6, r6, r7, lsl #2
 	ldr r6, [r6]		@ if syscall not inplemented go to out
 	cmp r6, #0
+	moveq r0, r7
 	ldreq r6,  __default_syscall_handler
 
 	mov lr, pc

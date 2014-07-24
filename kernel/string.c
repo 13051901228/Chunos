@@ -1,5 +1,6 @@
 #include <os/types.h>
 #include <os/string.h>
+#include <os/errno.h>
 
 int absolute(int num)
 {
@@ -132,6 +133,27 @@ int strcmp(const char *src, const char *dst)
 	return (ret);
 }
 
+int memcmp(const char *src, const char *dst, size_t size)
+{
+	int i;
+	char ret;
+
+	if (size == 0)
+		return -EINVAL;
+
+	for (i = 0; i < size; i++) {
+		if (src[i] != dst[i]) {
+			ret = src[i] - dst[i];
+			if (ret < 0)
+				return -1;
+			else if (ret > 0)
+				return 1;
+		}
+	}
+
+	return 0;
+}
+
 int strncmp(const char *src, const char *dst, int n)
 {
 	int ret = 0;
@@ -147,6 +169,14 @@ int strncmp(const char *src, const char *dst, int n)
 		ret = 1;
 
 	return (ret);
+}
+
+char *strchr(char *src, char ch)
+{
+	for (; *src != (char)ch; ++src)
+		if (*src == '\0')
+			return NULL;
+	return (char *)src;
 }
 
 #if 0

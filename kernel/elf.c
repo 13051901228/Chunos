@@ -1,11 +1,11 @@
 #include <os/elf.h>
 #include <os/slab.h>
 #include <os/types.h>
-#include <os/fs.h>
 #include <os/mm.h>
 #include <os/string.h>
 #include <os/errno.h>
 #include <os/printk.h>
+#include <os/file.h>
 
 static void elf_file_add_section(struct elf_file *file,
 			 elf_section_header *header,
@@ -92,10 +92,9 @@ struct elf_file *get_elf_info(struct file *file)
 	char *str;
 	struct elf_file *elf_file;
 
-	ret = fs_read(file, (char *)&hdr, sizeof(elf_header));
+	ret = kernel_read(file, (char *)&hdr, sizeof(elf_header));
 	if (ret < 0) {
-		kernel_error("read elf file error at 0x%x offset 0",
-						sizeof(elf_header));
+		kernel_error("read elf file error offset\n");
 		return NULL;
 	}
 	
@@ -126,25 +125,25 @@ struct elf_file *get_elf_info(struct file *file)
 	if (str == NULL)
 		goto err_str_mem;
 
-	ret = fs_seek(file, hdr.e_shoff);
+	ret = kernel_seek(file, hdr.e_shoff, SEEK_SET);
 	if (ret < 0) {
 		kernel_error("seek elf file failed\n");
 		return NULL;
 	}
 	
-	ret = fs_read(file, (char *)header, hdr.e_shnum * hdr.e_shentsize);
+	ret = kernel_read(file, (char *)header, hdr.e_shnum * hdr.e_shentsize);
 	if (ret < 0) {
 		elf_file = NULL;
 		goto go_out;
 	}
 
-	ret = fs_seek(file, header[hdr.e_shstrndx].sh_offset);
+	ret = kernel_seek(file, header[hdr.e_shstrndx].sh_offset, SEEK_SET);
 	if (ret < 0) {
 		elf_file = NULL;
 		goto go_out;
 	}
 
-	ret = fs_read(file, str, 4096);
+	ret = kernel_read(file, str, 4096);
 	if (ret < 0) {
 		elf_file = NULL;
 		goto go_out;

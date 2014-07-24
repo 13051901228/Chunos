@@ -2,7 +2,7 @@
 #define _ELF_H
 
 #include <os/types.h>
-#include <os/fs.h>
+#include <os/file.h>
 
 typedef unsigned char	elf_byte;
 typedef unsigned short	elf_half;

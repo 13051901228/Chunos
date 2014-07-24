@@ -25,8 +25,15 @@ extern int soc_late_init(void);
 extern int soc_early_init(void);
 extern int arch_init(void);
 
+extern unsigned long init_call_start;
+extern unsigned long init_call_end;
+
 int main(void)
 {
+	int i = 0;
+	init_call *fn;
+	int size;
+
 	/*
 	 * this function can let us use printk before 
 	 * kernel mmu page table build
@@ -51,7 +58,15 @@ int main(void)
 	soc_late_init();
 	syscall_init();
 	sched_init();
-	mount_ramdisk();
+
+	size = (init_call_end - init_call_start) / sizeof(unsigned long);
+	fn = (init_call *)init_call_start;
+	for (i = 0; i < size; i++ ) {
+		(*fn)();
+		fn++;
+	}
+	/* mount root filesystem */
+	mount_init();
 
 	build_idle_task();
 	/* now we can enable irq */
@@ -59,7 +74,7 @@ int main(void)
 	kthread_run("system_killer", system_killer, NULL);
 	init_task();
 	for (;;) {
-		kernel_info("In Idle State\n");
+//		kernel_info("In Idle State\n");
 		sched();
 	}
 

@@ -38,8 +38,9 @@ int mutex_lock_timeout(struct mutex *m, int ms)
 		}
 		else {
 			m->count = 1;
-			if (task)
+			if (task) {
 				list_add_tail(&task->mutex_get, &m->task);
+			}
 			break;
 		}
 	}
@@ -80,8 +81,9 @@ void mutex_unlock(struct mutex *m)
 		wakeup_task(task);
 	}
 
-	if (!is_list_empty(&m->task))
+	if (!is_list_empty(&m->task)) {
 		list_del(&m->task);
+	}
 
 	exit_critical(&flags);
 }

@@ -10,7 +10,7 @@
 #include <os/mmu.h>
 #include <asm/asm_sched.h>
 #include <os/elf.h>
-#include <os/fs.h>
+#include <os/file.h>
 #include <os/mm.h>
 #include <os/task.h>
 #include <os/syscall.h>
@@ -43,6 +43,10 @@ static int init_mm_struct(struct task_struct *task, u32 user_sp)
 		init_list(&mm->elf_list);
 		init_list(&mm->elf_stack_list);
 		init_list(&mm->elf_image_list);
+		init_list(&mm->mmap_page_list);
+		init_list(&mm->mmap_mem_list);
+		init_bitmap(mm->mmap, PROCESS_USER_MMAP_SIZE >> PAGE_SHIFT);
+		mm->free_pos = 0;
 	}
 	
 	return 0;
@@ -75,6 +79,10 @@ static int init_task_struct(struct task_struct *task, u32 flag)
 	init_list(&task->child);
 	init_mutex(&task->mutex);
 
+	task->file_desc = alloc_and_init_file_desc();
+	if (!task->file_desc)
+		return -ENOMEM;
+
 	enter_critical(&flags);
 	list_add(&parent->child, &task->p);
 	exit_critical(&flags);
@@ -103,6 +111,7 @@ static int release_task_page_table(struct task_struct *task)
 	/* release task's page table */
 	_release_task_memory(&tmp->stack_list);
 	_release_task_memory(&tmp->elf_list);
+	_release_task_memory(&tmp->mmap_page_list);
 
 	return 0;
 }
@@ -113,10 +122,13 @@ static int inline release_task_pages(struct task_struct *task)
 
 	/*
 	 * release task memeory which allocated
-	 * for task image.
+	 * for task image and mmap, but usually
+	 * the mmap memory must use munmap to free
+	 * them.
 	 */
 	_release_task_memory(&ms->elf_stack_list);
 	_release_task_memory(&ms->elf_image_list);
+	_release_task_memory(&ms->mmap_mem_list);
 
 	return 0;
 }
@@ -146,12 +158,13 @@ static int release_task_memory(struct task_struct *task)
 static int alloc_page_table(struct task_struct *new)
 {
 	struct mm_struct *tmp = &new->mm_struct;
-	int i, s, e;
+	int i, s, e, m;
 	void *addr;
 	struct page *page;
 
-	s = (PROCESS_STACK_SIZE + SIZE_1M - 1) >> 20;
-	e = (PROCESS_IMAGE_SIZE + SIZE_1M - 1) >> 20;
+	s = (PROCESS_STACK_SIZE + SIZE_NM(4) - 1) >> 22;
+	e = (PROCESS_IMAGE_SIZE + SIZE_NM(4) - 1) >> 22;
+	m = (PROCESS_USER_MMAP_SIZE) >> 22;
 
 	/*
 	 * at first,only allocate 16k stack(need 4k pagetable
@@ -163,6 +176,7 @@ static int alloc_page_table(struct task_struct *new)
 	 */
 	for (i=0; i < s ; i++) {
 		addr = get_free_page(GFP_PGT);
+		memset(addr, 0, PAGE_SIZE);
 		debug("allcoate statck page_table 0x%x\n", (u32)addr);
 		if (addr == NULL) {
 			goto error;
@@ -174,8 +188,9 @@ static int alloc_page_table(struct task_struct *new)
 	tmp->stack_curr = list_next(&tmp->stack_list);
 
 	/* allocate page table for elf file memory */
-	for (i=0; i < e; i ++) {
+	for (i = 0; i < e; i ++) {
 		addr = get_free_page(GFP_PGT);
+		memset(addr, 0, PAGE_SIZE);
 		debug("allcoate elf page_table 0x%x\n", (u32)addr);
 		if (addr == NULL) {
 			goto error;
@@ -184,6 +199,18 @@ static int alloc_page_table(struct task_struct *new)
 		list_add_tail(&tmp->elf_list, &page->pgt_list);
 	}
 	tmp->elf_curr = list_next(&tmp->elf_list);
+
+	/* allocate page table for mmap zone */
+	for (i = 0; i < m; i++) {
+		addr = get_free_page(GFP_PGT);
+		memset(addr, 0, PAGE_SIZE);
+		debug("allocate mmap page_table 0x%x\n", (u32)addr);
+		if (addr == NULL) {
+			goto error;
+		}
+		page = va_to_page((unsigned long)addr);
+		list_add_tail(&tmp->mmap_page_list, &page->pgt_list);
+	}
 
 	return 0;
 
@@ -241,6 +268,179 @@ repeat:
 	page->free_size -= sizeof(unsigned long);
 
 	return 0;
+}
+
+static int bitmap_find_free_base(u32 *map, int start,
+		int value, int map_nr, int count)
+{
+	int i = start;
+	int again = 0;
+	int sum = 0;
+
+	while (1) {
+		if (read_bit(map, start) == value) {
+			sum++;
+			if (sum == count)
+				return (i + 1 - count);
+		} else {
+			sum = 0;
+		}
+
+		if (i == map_nr - 1) {
+			again = 1;
+			sum = 0;
+			i = 0;
+		}
+
+		if (again) {
+			if (i == start)
+				break;
+		}
+
+		i++;
+	}
+
+	return -ENOSPC;
+}
+
+int mmap(struct task_struct *task, unsigned long start,
+		unsigned long virt, int flags)
+{
+	struct mm_struct *ms = &task->mm_struct;
+	int i, j;
+	struct list_head *list = &ms->mmap_page_list;
+	unsigned long *page_table;
+	struct page *page;
+
+	i = (start - PROCESS_USER_MMAP_BASE) / SIZE_NM(4);
+	j = ((start - PROCESS_USER_MMAP_BASE) % SIZE_NM(4)) / PAGE_SIZE;
+	kernel_debug("mmap start:0x%x 0x%x i:%d j:%d\n", start, virt, i, j);
+
+	do {
+		list = list_next(list);
+		i--;
+	} while (i >= 0);
+
+	page = list_entry(list, struct page, pgt_list);
+	page_table = (unsigned long *)page->free_base;
+	page_table += j;
+
+	if (*page_table != 0)
+		return -EAGAIN;
+
+	/* flag to be done */
+	build_page_table_entry(page_table, virt, PAGE_SIZE, 0);
+
+	/* after map we need flus the cache and invaild the TLB */
+	flush_mmu_tlb();
+	flush_cache();
+
+	/* update the mmap information */
+	page = va_to_page(start);
+	list_add_tail(&ms->mmap_mem_list, &page->plist);
+	page->flag |= flags;
+
+	return 0;
+}
+
+int munmap(struct task_struct *task, unsigned long start, int pages)
+{
+	struct mm_struct *ms = &task->mm_struct;
+	int bit_start;
+	int i;
+	int j;
+	struct list_head *list = &ms->mmap_page_list;
+	unsigned long *page_table;
+	unsigned long buffer;
+	struct page *page;
+	struct page *tmp;
+
+	bit_start = (start - PROCESS_USER_MMAP_BASE) / PAGE_SIZE;
+	i = (start - PROCESS_USER_MMAP_BASE) / SIZE_NM(4);
+	j = ((start - PROCESS_USER_MMAP_BASE) % SIZE_NM(4)) / PAGE_SIZE;
+	kernel_debug("mmap start:0x%x i:%d j:%d\n", start, i, j);
+	
+	do {
+		list = list_next(list);
+		i--;
+	} while (i >= 0);
+
+	page = list_entry(list, struct page, pgt_list);
+	page_table = (unsigned long *)page->free_base;
+	page_table += j;
+
+	for (i = 0; i < pages; i++) {
+		/* next page table */
+		if (j == 1024) {
+			j = 0;
+			list = list_next(list);
+			page = list_entry(list, struct page, pgt_list);
+			page_table = (unsigned long *)page->free_base;
+			page_table += j;
+		}
+
+		if (*page_table == 0) {
+			kernel_error("bug, memory is not maped please check\n");
+			j++;
+			page_table++;
+			continue;
+		}
+
+		/* get the va of the mem */
+		buffer = *page_table & 0xfffff000;
+		buffer = pa_to_va(buffer);
+		kernel_debug("umap memory is 0x%x\n", buffer);
+
+		tmp = va_to_page(buffer);
+		list_del(&tmp->plist);
+
+		if (read_bit(ms->mmap, bit_start + i))
+			clear_bit(ms->mmap, bit_start + i);
+
+#define PAGE_MMAP_FLAG_MASK	0x0
+		tmp->flag &= ~(PAGE_MMAP_FLAG_MASK);
+		kfree((void *)buffer);
+		*page_table = 0;
+
+		page_table++;
+	}
+
+	flush_mmu_tlb();
+	flush_cache();
+
+	return 0;
+}
+
+void *get_task_user_mm_free_base(struct task_struct *task, int page_nr)
+{
+	struct mm_struct *ms = &task->mm_struct;
+	unsigned long start;
+	int i, j, k;
+	int nr = PROCESS_USER_MMAP_SIZE >> PAGE_SHIFT;
+
+	/* find continous pages to map, shall we add a spin_lock ?*/
+	i = bitmap_find_free_base(ms->mmap, ms->free_pos, 0, nr, page_nr);
+	if (i < 0) {
+		kernel_error("no free user space for mmap\n");
+		return NULL;
+	}
+
+	/* calculate the free base of the user space
+	 * j is the n list, k is the pos in the list*/
+	j = i / 1024;
+	k = i % 1024;
+
+	start = PROCESS_USER_MMAP_BASE + (j * SIZE_NM(4)) + (k * PAGE_SIZE);
+	kernel_debug("find user mm: start:%x j:%d k:%d\n", start, j, k);
+
+	/* mask the memory will be used */
+	for (j = 0; j < page_nr; j++) {
+		set_bit(ms->mmap, i);
+		i++;
+	}
+	ms->free_pos = i;
+
+	return (void *)start;
 }
 
 static int alloc_memory_and_map(struct task_struct *task)
@@ -409,8 +609,9 @@ int switch_task(struct task_struct *cur,
 {
 	struct list_head *list;
 	struct list_head *head;
-	u32 stack_base = PROCESS_USER_STACK_BASE;
-	u32 task_base = PROCESS_USER_BASE;
+	unsigned long stack_base = PROCESS_USER_STACK_BASE;
+	unsigned long task_base = PROCESS_USER_BASE;
+	unsigned long mmap_base = PROCESS_USER_MMAP_BASE;
 	unsigned long pa;
 	struct page *page;
 
@@ -452,6 +653,14 @@ int switch_task(struct task_struct *cur,
 		page = list_entry(list, struct page, pgt_list);
 		pa = page_to_pa(page);
 		build_tlb_table_entry(task_base, pa, SIZE_NM(4), TLB_ATTR_USER_MEMORY);
+		task_base += SIZE_NM(4);
+	}
+
+	head = &next->mm_struct.mmap_page_list;
+	list_for_each (head, list) {
+		page = list_entry(list, struct page, pgt_list);
+		pa = page_to_pa(page);
+		build_tlb_table_entry(mmap_base, pa, SIZE_NM(4), TLB_ATTR_USER_MEMORY);
 		task_base += SIZE_NM(4);
 	}
 
@@ -641,7 +850,7 @@ int load_elf_section(struct elf_section *section,
 	 */
 	k = section->size;
 	mm->elf_size += k;
-	fs_seek(file, section->offset);
+	kernel_seek(file, section->offset, SEEK_SET);
 	do {
 		page = list_entry(list, struct page, plist);
 		base_addr = (char *)page->free_base;
@@ -650,7 +859,7 @@ int load_elf_section(struct elf_section *section,
 		if (strncmp(section->name, ".bss", 4)) {
 			debug("Load Section:[%s] address:[0x%x] size[0x%x]\n",
 				     section->name, base_addr, j);
-			i = fs_read(file, base_addr, j);
+			i = kernel_read(file, base_addr, j);
 			if (i < 0)
 				return -EIO;
 		} else {
@@ -791,7 +1000,7 @@ int do_exec(char __user *name,
 		strncpy(new->name, name, PROCESS_NAME_SIZE);
 	}
 
-	file = fs_open(name);
+	file = kernel_open(name, O_RDONLY);
 	if (!file) {
 		kernel_error("No such file %s\n", name);
 		err = -ENOENT;
@@ -834,7 +1043,7 @@ int do_exec(char __user *name,
 release_elf_file:
 	release_elf_file(elf);
 exit:
-	fs_close(file);
+	kernel_close(file);
 
 err_open_file:
 	if(err && (current->flag & PROCESS_TYPE_KERNEL)) {

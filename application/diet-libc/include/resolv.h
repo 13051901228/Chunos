@@ -24,7 +24,7 @@ __BEGIN_DECLS
 #define	MAXRESOLVSORT		10	/* number of net to sort on */
 #define	RES_MAXNDOTS		15	/* should reflect bit field size */
 
-struct res_state {
+typedef struct __res_state {
   int	retrans;	 	/* retransmission time interval */
   int	retry;			/* number of times to retransmit */
   unsigned long	options;		/* option flags - see below. */
@@ -44,7 +44,7 @@ struct res_state {
     uint32_t	mask;
   } sort_list[MAXRESOLVSORT];
   char	pad[72];		/* on an i386 this means 512b total */
-};
+} * res_state;
 
 /*
  * Resolver options (keep these in synch with res_debug.c, please)
@@ -92,7 +92,7 @@ struct res_sym {
 	char *	humanname;	/* Its fun name, like "mail exchanger" */
 };
 
-extern struct res_state _res;
+extern struct __res_state _res;
 extern const struct res_sym __p_class_syms[];
 extern const struct res_sym __p_type_syms[];
 
@@ -119,11 +119,13 @@ int dn_comp(unsigned char *msg, unsigned char *comp_dn,
       int length, unsigned char **dnptrs, unsigned char *exp_dn,
       unsigned char **lastdnptr) __THROW;
 
-int dn_expand(unsigned char *msg, unsigned char *eomorig,
-      unsigned char *comp_dn, unsigned char *exp_dn,
+int dn_expand(const unsigned char *msg, const unsigned char *eomorig,
+      const unsigned char *comp_dn, unsigned char *exp_dn,
       int length) __THROW;
 
 void res_close(void) __THROW __attribute_dontuse__;
+
+int dn_skipname(const unsigned char* cur,const unsigned char* eom) __THROW;
 
 __END_DECLS
 

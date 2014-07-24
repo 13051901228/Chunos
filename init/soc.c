@@ -130,10 +130,10 @@ static void __init_text soc_get_mem_info(struct soc *soc)
 	extern u32 init_start, init_end;
 	struct soc_memory_info *memory_info = get_soc_memory_info();
 
-	kernel_debug("code start 0x%x code end 0x%x bss_start 0x%x bss_end 0x%x	\
-		      kernel_virtual_start 0x%x	kernel_phy_start 0x%x \n", code_start,
-		      code_end, bss_start, bss_end,
-		      kernel_virtual_start, kernel_phy_start);
+	kernel_debug("code start 0x%x code_end 0x%x\n", code_start, code_end);
+	kernel_debug("bss_start 0x%x bss_end 0x%x\n", bss_start, bss_end);
+	kernel_debug("kernel_virtual_start 0x%x kernel_phy_start 0x%x\n",
+			kernel_virtual_start, kernel_phy_start);
 
 	memory_info->code_start = code_start;
 	memory_info->code_end = code_end;

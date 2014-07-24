@@ -8,6 +8,13 @@
 #include <asm/asm_mmu.h>
 #include <os/bound.h>
 #include <os/errno.h>
+#include <config/config.h>
+
+#ifdef DEBUG_MMU
+#define mmu_debug(fmt, ...) kernel_debug(fmt, ##__VA_ARGS__)
+#else
+#define mmu_debug(fmt, ...)
+#endif
 
 static inline unsigned long get_tlb_base(void)
 {
@@ -70,6 +77,9 @@ int build_tlb_table_entry(unsigned long vstart,
 	u32 value;
 	u32 attr = 0;
 
+	mmu_debug("build_tlb_table v 0x%x p 0x%x size 0x%x\n",
+			vstart, pstart, size);
+
 	if (is_aligin(vstart, SIZE_1M) &&
 	    is_aligin(vstart, SIZE_1M) &&
 	    is_aligin(size, SIZE_1M)) {
@@ -117,8 +127,11 @@ int build_page_table_entry(unsigned long base,
 	u32 attr;
 	unsigned long pa = va_to_pa(vstart);
 
+	mmu_debug("build_page_table: base:%x0x vstart:0x%x size:0x%x\n",
+			base, vstart, size);
+
 	if (!is_aligin(size, PAGE_SIZE) || size > SIZE_1M) {
-		kernel_error("build page_table_entry: size not aligin");
+		kernel_error("build page_table_entry: size not aligin\n");
 		return -EINVAL;
 	}
 

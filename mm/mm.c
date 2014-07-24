@@ -334,14 +334,14 @@ int do_map_memory(struct mm_bank *bank)
 			section = &zone->memory_section[j];
 			if (section->vir_start == info->kernel_virtual_start) {
 				mm_info("skip already maped memeory 0x%x\n", already_map);
-				build_tlb_table_entry(section->vir_start - already_map,
-						section->phy_start - already_map,
+				build_tlb_table_entry(section->vir_start + already_map,
+						section->phy_start + already_map,
 						section->size - already_map, flag);
+			} else {
+				build_tlb_table_entry(section->vir_start,
+						 section->phy_start,
+						 section->size, flag);
 			}
-
-			build_tlb_table_entry(section->vir_start,
-					      section->phy_start,
-					      section->size, flag);
 		}
 	}
 
@@ -699,6 +699,7 @@ static u32 find_continous_pages(struct mm_zone *zone, int count)
 		if (i == zone->bm_end) {
 			again = 1;
 			sum = 0;
+			/* fix me needed to be checked */
 			i = zone->bm_start - 1;
 		}
 

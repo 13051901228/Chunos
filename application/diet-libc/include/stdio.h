@@ -3,8 +3,8 @@
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <stdarg.h>
+#include <endian.h>
 
 __BEGIN_DECLS
 
@@ -89,7 +89,7 @@ int fseeko_unlocked(FILE *stream, off_t offset, int whence) __THROW;
 off_t ftello(FILE *stream) __THROW;
 off_t ftello_unlocked(FILE *stream) __THROW;
 
-#ifndef __NO_STAT64
+#if __WORDSIZE == 32
 int fseeko64(FILE *stream, loff_t offset, int whence) __THROW;
 int fseeko64_unlocked(FILE *stream, loff_t offset, int whence) __THROW;
 loff_t ftello64(FILE *stream) __THROW;
@@ -135,7 +135,7 @@ void perror(const char *s) __THROW;
 
 #define EOF (-1)
 
-#define BUFSIZ 128
+#define BUFSIZ 1024
 
 #define _IONBF 0
 #define _IOLBF 1
@@ -187,9 +187,16 @@ void funlockfile(FILE* f) __THROW;
 int ftrylockfile (FILE *__stream) __THROW;
 
 #ifdef _GNU_SOURCE
-int vasprintf(char **strp, const char *fmt, va_list ap);
-ssize_t getline(char **lineptr, size_t *n, FILE *stream);
-ssize_t getdelim(char **lineptr, size_t *n, int delim, FILE *stream);
+int vasprintf(char **strp, const char *fmt, va_list ap) __THROW;
+ssize_t getline(char **lineptr, size_t *n, FILE *stream) __THROW;
+ssize_t getdelim(char **lineptr, size_t *n, int delim, FILE *stream) __THROW;
+#endif
+
+#if defined(_ATFILE_SOURCE) || ((_XOPEN_SOURCE + 0) >= 700) || ((_POSIX_C_SOURCE + 0) >= 200809L)
+/* also include fcntl.h for the AT_* constants */
+
+int symlinkat(const char *oldpath, int newdirfd, const char *newpath);
+int renameat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath) __THROW;
 #endif
 
 __END_DECLS

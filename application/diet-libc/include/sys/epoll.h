@@ -3,9 +3,13 @@
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
-#include <sys/poll.h>
+#include <poll.h>
+#include <signal.h>
 
 __BEGIN_DECLS
+
+/* Flags for epoll_create1.  */
+#define EPOLL_CLOEXEC O_CLOEXEC
 
 /* Valid opcodes ( "op" parameter ) to issue to epoll_ctl() */
 #define EPOLL_CTL_ADD 1	/* Add a file decriptor to the interface */
@@ -41,6 +45,9 @@ enum EPOLL_EVENTS {
 	EPOLLHUP = 0x010,
 #define EPOLLHUP EPOLLHUP
 
+	EPOLLONESHOT = (1<<30),
+#define EPOLLONESHOT EPOLLONESHOT
+
 	EPOLLET = (1<<31)
 #define EPOLLET EPOLLET
 };
@@ -65,6 +72,8 @@ int epoll_create(int size) __THROW;
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event* event) __THROW;
 int epoll_wait(int epfd, struct epoll_event *events, int maxevents,
 	       int timeout) __THROW;
+int epoll_pwait(int epfd, struct epoll_event *events, int maxevents,
+	       int timeout, const sigset_t* sigmask) __THROW;
 
 __END_DECLS
 

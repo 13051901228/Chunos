@@ -38,6 +38,30 @@ SECTIONS
 
 	. = ALIGN(4);
 
+	__init_func_start = .;
+	.__init_func_0 : {
+		*(.__init_func_0)
+	}
+	.__init_func_1 : {
+		*(.__init_func_1)
+	}
+	.__init_func_2 : {
+		*(.__init_func_2)
+	}
+	.__init_func_3 : {
+		*(.__init_func_3)
+	}
+	.__init_func_4 : {
+		*(.__init_func_4)
+	}
+	.__init_func_5 : {
+		*(.__init_func_5)
+	}
+	.__init_func_6 : {
+		*(.__init_func_6)
+	}
+	__init_func_end = .;
+
 	__init_text_start = .;
 	.__init_text : {
 		*(__init_text)

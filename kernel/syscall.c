@@ -6,7 +6,6 @@
 #include <os/list.h>
 #include <os/string.h>
 #include <os/sched.h>
-#include <os/fs.h>
 #include <os/elf.h>
 #include <os/syscall.h>
 #include <os/panic.h>
@@ -36,9 +35,9 @@ int install_syscall(int nr, unsigned long *addr)
 	return error;
 }
 
-int default_syscall_handler(void)
+int default_syscall_handler(int num)
 {
-	kernel_error("Unsupport syscall call\n");
+	kernel_error("Unsupport syscall call %d\n", num);
 
 	return 0;
 }

@@ -3,7 +3,7 @@
 
 #include <sys/cdefs.h>
 #include <sys/types.h>
-#include <sys/stat.h>
+#include <endian.h>
 #include <sys/fsuid.h>
 #include <sys/select.h>
 
@@ -34,7 +34,7 @@ int access (const char *__name, int __type) __THROW;
 #define STDERR_FILENO  2
 
 off_t lseek(int fildes, off_t offset, int whence) __THROW;
-#ifndef __NO_STAT64
+#if __WORDSIZE == 32
 loff_t lseek64(int fildes, loff_t offset, int whence) __THROW;
 #if defined _FILE_OFFSET_BITS && _FILE_OFFSET_BITS == 64
 #define lseek(fildes,offset,whence) lseek64(fildes,offset,whence)
@@ -44,14 +44,18 @@ loff_t lseek64(int fildes, loff_t offset, int whence) __THROW;
 int chdir(const char *path) __THROW;
 int fchdir(int fd) __THROW;
 int rmdir(const char *pathname) __THROW;
-char *getcwd(char *buf, size_t size) __THROW;
+char *getcwd(char *buf, size_t size) __THROW __attribute__((__warn_unused_result__));
+
+#ifdef _GNU_SOURCE
+char *get_current_dir_name (void) __THROW __attribute_dontuse__;
+#endif
 
 int open(const char* pathname,int flags, ...) __THROW;
 int open64(const char* pathname,int flags, ...) __THROW;
 int creat(const char* pathname,mode_t mode) __THROW;
 int creat64(const char* pathname,mode_t mode) __THROW;
-int write(int fd,const void* buf,size_t len) __THROW;
-int read(int fd,void* buf,size_t len) __THROW;
+ssize_t write(int fd,const void* buf,size_t len) __THROW;
+ssize_t read(int fd,void* buf,size_t len) __THROW;
 int close(int fd) __THROW;
 
 int unlink(const char *pathname) __THROW;
@@ -68,7 +72,8 @@ int execvp(const char *file, char *const argv[]) __THROW;
 int execl(const char *path, ...) __THROW;
 int execle(const char *path, ...) __THROW;
 
-pid_t getpid(void) __THROW;
+pid_t getpid(void) __THROW __pure;
+
 pid_t getppid(void) __THROW;
 
 int setpgid (pid_t pid,pid_t pgid) __THROW;
@@ -144,7 +149,7 @@ int setreuid(uid_t ruid, uid_t euid) __THROW;
 
 int truncate(const char *path, off_t length) __THROW;
 int ftruncate(int fd, off_t length) __THROW;
-#ifndef __NO_STAT64
+#if __WORDSIZE == 32
 int truncate64(const char *path, loff_t length) __THROW;
 int ftruncate64(int fd, loff_t length) __THROW;
 #endif
@@ -155,7 +160,7 @@ char *crypt(const char *key, const char *salt) __THROW;
 void encrypt(char block[64], int edflag) __THROW;
 void setkey(const char *key) __THROW;
 
-size_t getpagesize(void) __THROW __attribute__((__const__));
+size_t getpagesize(void) __THROW __attribute__((__const__,__pure__));
 
 int getdomainname(char *name, size_t len) __THROW;
 int setdomainname(const char *name, size_t len) __THROW;
@@ -181,6 +186,7 @@ size_t confstr(int name,char*buf,size_t len) __THROW;
 #define _SC_PAGESIZE 5
 #define _SC_NPROCESSORS_ONLN 6
 #define _SC_NPROCESSORS_CONF _SC_NPROCESSORS_ONLN
+#define _SC_PHYS_PAGES 7
 long sysconf(int name) __THROW;
 #define _PC_PATH_MAX 1
 #define _PC_VDISABLE 2
@@ -242,7 +248,7 @@ int vhangup(void) __THROW;
 
 extern char **__environ;
 
-#ifndef __NO_STAT64
+#if __WORDSIZE == 32
 #if defined _FILE_OFFSET_BITS && _FILE_OFFSET_BITS == 64
 #define open open64
 #define creat creat64
@@ -260,6 +266,21 @@ long init_module(void *module, unsigned long len, const char *options) __THROW;
 /* flags can be O_EXCL | O_NONBLOCK | O_TRUNC (forced unloading)
  * O_EXCL is there so the kernel can spot old rmmod versions */
 long delete_module(const char* name,unsigned int flags) __THROW;
+pid_t gettid(void) __THROW __pure;
+int tkill(pid_t tid, int sig) __THROW;
+int tgkill(pid_t tgid, pid_t tid, int sig) __THROW;
+/* see linux/fadvise.h */
+long fadvise64(int fd,off64_t offset,size_t len,int advice);
+long fadvise64_64(int fd,off64_t offset,off64_t len,int advice);
+#endif
+
+#if defined(_ATFILE_SOURCE) || ((_XOPEN_SOURCE + 0) >= 700) || ((_POSIX_C_SOURCE + 0) >= 200809L)
+/* also include fcntl.h for the AT_* constants */
+
+int faccessat(int dirfd, const char *pathname, int mode, int flags) __THROW;
+int fchownat(int dirfd, const char *pathname, uid_t owner, gid_t group, int flags) __THROW;
+int linkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, int flags) __THROW;
+int readlinkat(int dirfd, const char *pathname, char *buf, size_t bufsiz) __THROW;
 #endif
 
 __END_DECLS

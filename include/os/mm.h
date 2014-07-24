@@ -7,6 +7,7 @@
 #include <os/mutex.h>
 #include <os/mirros.h>
 #include <os/soc.h>
+#include <os/init.h>
 
 struct platform_info;
 
@@ -35,6 +36,18 @@ typedef enum __mm_zone_t {
 
 #define GFP_ZONE_ID_MASK	0x0000000f
 
+#ifdef DEBUG_MM
+#define mm_debug(fmt, ...)	pr_debug("[  mm:  ] ", fmt,##__VA_ARGS__)
+#define mm_info(fmt, ...)	pr_info("[  mm:  ] ", fmt,##__VA_ARGS__)
+#define mm_error(fmt, ...)	pr_error("[  mm:  ] ", fmt,##__VA_ARGS__)
+
+#else
+#define mm_debug(fmt, ...)
+#define mm_info(fmt, ...)
+#define mm_error(fmt, ...)
+
+#endif
+
 /*
  *indicate the usage of the memory
  */
@@ -54,10 +67,6 @@ typedef enum __mm_zone_t {
 #define GFP_SLAB_HEADER		(__GFP_SLAB_HEADER | __GFP_KERNEL)
 
 #define __GFP_MASK		(__GFP_PGT | __GFP_FULL |__GFP_SLICE | __GFP_SLAB_HEADER | __GFP_USER)
-
-#define mm_debug(fmt, ...)	pr_debug("[  mm:  ] ", fmt,##__VA_ARGS__)
-#define mm_info(fmt, ...)	pr_info("[  mm:  ] ", fmt,##__VA_ARGS__)
-#define mm_error(fmt, ...)	pr_error("[  mm:  ] ", fmt,##__VA_ARGS__)
 
 /*page:represent 4k in physical memory
  * virtual_address:virtual address that page maped to 

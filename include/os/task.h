@@ -1,10 +1,13 @@
-#ifndef _TASK_H	
+#ifndef _TASK_H
 #define _TASK_H
 
 #include <os/list.h>
 #include <os/types.h>
 #include <os/mutex.h>
 #include <asm/asm_sched.h>
+#include <os/bitops.h>
+#include <os/mm.h>
+#include <os/mirros.h>
 
 #define KERNEL_STACK_SIZE	(SIZE_4K)
 #define PROCESS_STACK_SIZE	(4 * PAGE_SIZE)		/* 16k stack size */
@@ -22,7 +25,7 @@
 #define PROCESS_MAP_HEAP	2
 #define PROCESS_MAP_MASK	0x0f
 
-typedef enum _task_state {
+typedef enum _state_t {
 	PROCESS_STATE_PREPARE,
 	PROCESS_STATE_RUNNING,
 	PROCESS_STATE_SLEEP,
@@ -47,12 +50,18 @@ typedef enum _task_state {
 struct mm_struct {
 	int elf_size;
 	int stack_size;
-	struct list_head *stack_curr;
-	struct list_head *elf_curr;
-	struct list_head stack_list;
-	struct list_head elf_list;
+	struct list_head *stack_curr;		/* for page table */
+	struct list_head *elf_curr;		/* for page table */
+	struct list_head stack_list;		/* for page table */
+	struct list_head elf_list;		/* for page table */
 	struct list_head elf_stack_list;
 	struct list_head elf_image_list;
+
+	/* for mmap */
+	struct list_head mmap_page_list;
+	struct list_head mmap_mem_list;
+	DECLARE_BITMAP(mmap, PROCESS_USER_MMAP_SIZE >> PAGE_SHIFT);
+	int free_pos;
 };
 
 /*
@@ -100,6 +109,8 @@ struct task_struct {
 	struct list_head sleep;
 	struct list_head idle;
 
+	struct file_desc *file_desc;
+
 	/*
 	 * mutex which task wait and got, wait list only can
 	 * have one mutex but get list can have many.
@@ -118,5 +129,11 @@ static inline pt_regs *get_pt_regs(void)
 {
 	return arch_get_pt_regs();
 }
+
+int mmap(struct task_struct *task, unsigned long start,
+			unsigned long virt, int flags);
+
+int munmap(struct task_struct *task, unsigned long start, int pages);
+void *get_task_user_mm_free_base(struct task_struct *task, int page_nr);
 
 #endif

@@ -7,5 +7,11 @@
 #include <os/bitops.h>
 #include <os/list.h>
 #include <os/bound.h>
+#include <os/slab.h>
+#include <os/string.h>
+#include <os/task.h>
+#include <os/mm.h>
+#include <os/errno.h>
+
 
 #endif

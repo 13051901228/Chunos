@@ -62,8 +62,8 @@ reset:						@ r4 = arch_version r5 = soc id r6 = board id,
 	bne boot_error
 
 	adr r1, pv_offset			@ store physical to virtual offset to pv_offset 
-	adr r0, _start
-	ldr r2, start
+	adr r0, _start				@ phsyic start address
+	ldr r2, start				@ virtual start address
 	mov r3, r2
 	sub r3, r3, #KERNEL_LOAD_ADDRESS_ALIGIN
 	adr r4, kernel_virtual_start
@@ -122,9 +122,11 @@ init_mmu:
 
 	mcr p15, 0, r0, c8, c7, 0	@ invalidate tlb
 
-	ldr r5, bss_end
+	ldr r5, code_end
 	sub r5, r5, #KERNEL_BASE_ADDRESS
-	ldr r6, =0xfffff
+	add r5, r5, #0x100000
+	sub r5, r5, #1
+	ldr r6, =0xfff00000
 	and r2, r5, r6			@ how many memory we need map for kernel at boot stage
 	lsr r2, r2, #20
 
@@ -281,3 +283,8 @@ syscall_table_start:		.word __syscall_table_start
 .global syscall_table_end
 syscall_table_end:		.word __syscall_table_end
 
+.global init_call_start
+init_call_start:		.word __init_func_start
+
+.global init_call_end
+init_call_end:			.word __init_func_end

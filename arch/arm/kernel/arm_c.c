@@ -13,6 +13,7 @@
 #include <asm/asm_sched.h>
 #include <os/sched.h>
 #include <os/panic.h>
+#include <os/task.h>
 #include "include/kconfig.h"
 
 /* code for libgcc.a */

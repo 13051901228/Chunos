@@ -6,13 +6,13 @@
 
 #define MEM_MAX_REGION	16
 
-typedef int (*init_call)(void);
-
 struct memory_region {
 	u32 start;
 	u32 size;
 	int attr;
 };
+
+typedef int (*init_call_t)(void);
 
 struct soc_memory_info {
 	u32 code_start;		/* all kernel data-text start address */
@@ -39,7 +39,7 @@ struct soc_platform {
 	u32 (*system_clk_init)(void);
 	int (*system_timer_init)(u32 hz);
 	struct irq_chip *irq_chip;
-	init_call *init_action;
+	init_call_t *init_action;
 };
 
 struct soc_board {

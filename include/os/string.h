@@ -14,6 +14,8 @@ int is_digit(char ch);
 int strcmp(const char *src, const char *dst);
 int strncmp(const char *src, const char *dst,int n);
 int memcpy(void *target, void *source, int size);
+int memcmp(const char *src, const char *dst, size_t size);
 void memset(char *base, char ch, int size);
+char *strchr(char *str, char ch);
 
 #endif

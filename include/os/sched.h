@@ -1,12 +1,12 @@
-#ifndef _SCHED_H
-#define _SCHED_H
-
-#include <os/task.h>
+#ifndef _SCHED_H_
+#define _SCHED_H_
 
 #define MAX_PRIO		16
 #define MAX_PRIO_SHIFT		4
 #define PROCESS_DEFAULT_PRIO	20
 #define KERNEL_THREAD_PRIO	5
+
+#include <os/task.h>
 
 extern struct task_struct *current;
 extern struct task_struct *idle;
