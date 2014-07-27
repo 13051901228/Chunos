@@ -42,6 +42,7 @@ typedef long			time_t;
 typedef u32			block_t;
 typedef u16			gid_t;
 typedef	u16			uid_t;
+typedef u8			bool;
 
 #define MAX(a, b)	a > b ? a : b
 #define MIN(a, b)	a < b ? a : b

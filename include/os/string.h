@@ -17,5 +17,6 @@ int memcpy(void *target, void *source, int size);
 int memcmp(const char *src, const char *dst, size_t size);
 void memset(char *base, char ch, int size);
 char *strchr(char *str, char ch);
+int num_to_str(char *buf, unsigned int num, int bdho);
 
 #endif

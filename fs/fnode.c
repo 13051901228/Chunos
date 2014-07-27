@@ -172,16 +172,25 @@ static int copy_fnode(struct fnode *fnode, struct fnode *father)
 	struct filesystem *fs = fnode_get_filesystem(father);
 	int ret = 0;
 
+	/* TBC */
 	fnode->sb = father->sb;
 	fnode->psize = father->psize;
 	fnode->data_size = father->data_size;
 	fnode->buffer_size = father->buffer_size;
 	fnode->blk_cnt = father->blk_cnt;
+	fnode->mode = father->mode;
+	fnode->state = 0;
+	fnode->nlinks = 0;
 
-	page_nr = page_nr(father->buffer_size);
-	if (page_nr) {
-		kernel_debug("request %d page for fnode\n", page_nr);
-		fnode->data_buffer = get_free_pages(page_nr, GFP_KERNEL);
+	if (father->buffer_size != 0) {
+		if (father->buffer_size < 3 * 512 ) {
+			fnode->data_buffer = kzalloc(father->buffer_size, GFP_KERNEL);
+		} else {
+			page_nr = page_nr(father->buffer_size);
+			kernel_debug("request %d page for fnode\n", page_nr);
+			fnode->data_buffer = get_free_pages(page_nr, GFP_KERNEL);
+		}
+
 		if (!fnode->data_buffer)
 			return -ENOMEM;
 	}
@@ -329,7 +338,7 @@ struct fnode *get_file_fnode(char *file_name, int flag)
 		real_name = get_file_fs_name(mnt, file_name);
 		if (!real_name)
 			return NULL;
-		kernel_debug("find mount point %s\n real_name %s\n",
+		kernel_debug("find mount point %s real_name %s\n",
 				mnt->path, real_name);
 		root_fnode = mnt->sb->root_fnode;
 	}

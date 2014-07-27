@@ -3,6 +3,7 @@
 
 #include <os/fnode.h>
 #include <os/filesystem.h>
+#include <sys/stat.h>
 
 enum {
 	DT_UNKNOWN = 0,
@@ -67,10 +68,11 @@ struct file_operations {
 	int (*read)(struct file *file, char *buf, size_t size);
 	int (*write)(struct file *file, char *buf, size_t size);
 	int (*seek)(struct file *file, offset_t offset, int whence);
-	int (*ioctl)(struct file *file, u32 cmd, void *arg);
+	int (*ioctl)(struct file *file, int cmd, void *arg);
 	int (*open)(struct file *file, int flag);
 	int (*close)(struct file *file);
 	int (*mmap)(struct file *file, char *buffer, size_t size, offset_t offset);
+	int (*stat)(struct file *file, struct stat *stat);
 };
 
 typedef struct file {

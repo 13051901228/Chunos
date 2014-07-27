@@ -24,6 +24,7 @@ extern int irq_init(void);
 extern int soc_late_init(void);
 extern int soc_early_init(void);
 extern int arch_init(void);
+extern int log_buffer_init(void);
 
 extern unsigned long init_call_start;
 extern unsigned long init_call_end;
@@ -39,6 +40,7 @@ int main(void)
 	 * kernel mmu page table build
 	 */
 	disable_irqs();
+	log_buffer_init();
 	console_early_init();
 	soc_early_init();
 

@@ -19,7 +19,6 @@
 
 #define ALIGIN_SIZE		4
 
-
 static inline int is_aligin(unsigned long base, int bound)
 {
 	return ((base & (bound - 1)) == 0);

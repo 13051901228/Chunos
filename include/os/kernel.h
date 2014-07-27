@@ -13,5 +13,24 @@
 #include <os/mm.h>
 #include <os/errno.h>
 
+static inline void lock_kernel(void)
+{
+	disable_irqs();
+}
+
+static inline void unlock_kernel(void)
+{
+	enable_irqs();
+}
+
+static inline void lock_kernel_irqsave(unsigned long *flags)
+{
+	enter_critical(flags);
+}
+
+static inline void unlock_kernel_irqstore(unsigned long *flags)
+{
+	exit_critical(flags);
+}
 
 #endif

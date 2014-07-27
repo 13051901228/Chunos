@@ -118,7 +118,6 @@ static int fill_fat_super(struct fat_super_block *fsb, char *buf)
 	struct fat32_extra *extra32;
 	struct fat16_extra *extra16;
 	u8 fat_type;
-	int i;
 
 	if ((tmp[510] != 0x55) || (tmp[511] != 0xaa))
 		return -EINVAL;

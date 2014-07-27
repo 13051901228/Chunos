@@ -168,15 +168,12 @@ struct mount_point *get_mount_point(char *file_name)
 
 char *get_file_fs_name(struct mount_point *mnt, char *file_name)
 {
-	kernel_debug("------0\n");
 	if (strncmp(mnt->path, file_name, strlen(mnt->path)))
 		return NULL;
 	
-	kernel_debug("------p\n");
 	if (strlen(file_name) < (strlen(mnt->path)))
 		return NULL;
 
-	kernel_debug("------q\n");
 	/* mount point is /home then /home/1.txt is 1.txt */
 	return (file_name + (strlen(mnt->path)));
 }

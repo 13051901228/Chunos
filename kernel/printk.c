@@ -3,6 +3,8 @@
 #include <os/string.h>
 #include <os/printk.h>
 #include <os/mirros.h>
+#include <os/spin_lock.h>
+#include <os/tty.h>
 
 #define PRINTF_DEC		0X0001
 #define PRINTF_HEX		0x0002
@@ -12,7 +14,29 @@
 #define PRINTF_UNSIGNED		0X0010
 #define PRINTF_SIGNED		0x0020
 
-extern void __puts(char *buf);
+#define LOG_BUFFER_SIZE		(8192)
+
+struct log_buffer {
+	spin_lock_t buffer_lock;
+	int head;
+	int tail;
+	int total;
+	int handle_head;
+	char buf[LOG_BUFFER_SIZE];
+};
+
+static struct log_buffer log_buffer;
+
+int log_buffer_init(void)
+{
+	spin_lock_init(&log_buffer.buffer_lock);
+	log_buffer.head = 0;
+	log_buffer.tail = 0;
+	log_buffer.total = 0;
+	log_buffer.handle_head = 0;
+
+	return 0;
+}
 
 int numbric(char *buf,unsigned int num, int flag)
 {
@@ -106,8 +130,7 @@ int vsprintf(char *buf, const char *fmt, va_list arg)
 		if(flag & PRINTF_UNSIGNED){
 			unumber = va_arg(arg, u32);
 			len = numbric(str, unumber, flag);
-		}
-		else{
+		} else {
 
 			number = va_arg(arg, s32);
 			len = numbric(str, number, flag);
@@ -121,24 +144,41 @@ int vsprintf(char *buf, const char *fmt, va_list arg)
 	return str-buf;
 }
 
-void puts(char *buf)
+static int update_log_buffer(char *buf, int printed)
 {
-	uart_puts(buf);
+	struct log_buffer *lb = &log_buffer;
+	int len1, len2;
+
+	if ((lb->tail + printed) > (LOG_BUFFER_SIZE - 1)) {
+		len1 = LOG_BUFFER_SIZE - lb->tail;
+		len2 = printed - len1;
+	} else {
+		len1 = printed;
+		len2 = 0;
+	}
+
+	if (len1)
+		memcpy(lb->buf + lb->tail, buf, len1);
+
+	if (len2)
+		memcpy(lb->buf, buf + len1, len2);
+	
+	lb->total += printed;
+
+	if (len2)
+		lb->head = lb->tail = len1;
+	else {
+		lb->tail += len2;
+		if (lb->total > LOG_BUFFER_SIZE)
+			lb->head = lb->tail;
+	}
+
+	return 0;
 }
 
-int printk(const char *fmt,...)
+int early_printk(char *str)
 {
-	va_list arg;
-	int printed;
-	char printf_buf[1024];
-	
-	va_start(arg,fmt);
-	printed = vsprintf(printf_buf, fmt, arg);
-	va_end(arg);
-
-	puts(printf_buf);
-
-	return printed;
+	return uart_puts(str);
 }
 
 int level_printk(const char *fmt,...)
@@ -147,8 +187,9 @@ int level_printk(const char *fmt,...)
 	int level = LOG_LEVEL;
 	va_list arg;
 	int printed;
-	char printf_buf[1024];
 	ch = *fmt;
+	unsigned long flags;
+	static char buf[1024];
 
 	if (is_digit(ch)) {
 		ch = ch-'0';
@@ -157,11 +198,19 @@ int level_printk(const char *fmt,...)
 		fmt++;
 	}
 	
+	spin_lock_irqsave(&log_buffer.buffer_lock, &flags);
+
 	va_start(arg, fmt);
-	printed = vsprintf(printf_buf, fmt, arg);
+	printed = vsprintf(buf, fmt, arg);
 	va_end(arg);
 
-	puts(printf_buf);
+	update_log_buffer(buf, printed);
+
+	if (!tty_flush_log(buf, printed)) {
+		early_printk(buf);
+	}
+
+	spin_unlock_irqstore(&log_buffer.buffer_lock, &flags);
 
 	return printed;
 }

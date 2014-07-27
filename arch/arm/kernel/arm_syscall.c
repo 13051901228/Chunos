@@ -48,8 +48,7 @@ DEFINE_SYSCALL(exit, __NR_exit, (void *)sys_exit);
 
 int sys_write(int fd, const void *buf, size_t count)
 {
-	if (fd == 1)
-		return uart_put_char(buf, count);
+	return _sys_write(fd, buf, count);
 }
 DEFINE_SYSCALL(write, __NR_write, (void *)sys_write);
 

@@ -219,7 +219,6 @@ int s3c2440_uart0_init(int baud)
 	iowrite32(0x0, uart_base + UMCON0);
 	iowrite32(0x03, uart_base + ULCON0);
 	iowrite32(0x345, uart_base + UCON0);
-	iowrite32(val, uart_base + UBRDIV1);
 	iowrite32(val, uart_base + UBRDIV0);
 
 	return 0;
@@ -229,7 +228,7 @@ void platform_uart0_send_byte(u16 ch)
 {
 	if (ch == '\n') {
 //		while(!(ioread32(uart_base + UTRSTAT0) & 0x02));
-		iowrite8('\r',uart_base + UTXH0);
+		iowrite8('\r', uart_base + UTXH0);
 	}
 
 //	while(!(ioread32(uart_base + UTRSTAT0) & 0x02));

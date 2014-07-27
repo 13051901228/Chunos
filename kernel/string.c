@@ -9,22 +9,22 @@ int absolute(int num)
 	return (~num) + 1;
 }
 
-static int num_to_str(char *buf, unsigned int num, int bdho)
+int num_to_str(char *buf, unsigned int num, int bdho)
 {
 	char hex[] ="0123456789abcdef";
-	int m,len,res;
-	char tmp_buf[32] ={"00000000000000000000000000000000"};
+	int m, len, res;
+	char tmp_buf[32] = {"00000000000000000000000000000000"};
 	char *tmp = tmp_buf;
 
 	do {
-		m = num%bdho;
-		num = num/bdho;
+		m = num % bdho;
+		num = num / bdho;
 		*tmp++ = hex[m];
 	} while (num >= bdho);
 	if (num != 0)
 		*tmp++ = hex[num];
 	
-	res = len = tmp-tmp_buf;
+	res = len = tmp - tmp_buf;
 	while (len > 0) {
 		*buf++ = tmp_buf[len-1];
 		len--;

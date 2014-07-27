@@ -21,6 +21,7 @@ OUT_ARCH 	= $(OUT)/$(ARCH)
 OUT_PLATFORM 	= $(OUT)/$(PLATFORM)
 OUT_BOARD 	= $(OUT)/$(BOARD)
 OUT_FS		= $(OUT)/fs
+OUT_DRIVER	= $(OUT)/drivers
 
 boot_elf 	:= $(OUT)/boot.elf
 boot_bin 	:= $(OUT)/boot.bin
@@ -33,9 +34,10 @@ SRC_PLATFORM_C	:= $(wildcard arch/$(ARCH)/platform/$(PLATFORM)/*.c)
 SRC_PLATFORM_S	:= $(wildcard arch/$(ARCH)/platform/$(PLATFORM)/*.S)
 SRC_BOARD_C	:= $(wildcard arch/$(ARCH)/board/$(BOARD)/*.c)
 SRC_BOARD_S	:= $(wildcard arch/$(ARCH)/board/$(BOARD)/*.S)
-SRC_FS		:= $(wildcard fs/*.c fs/lmfs/*.c)
+SRC_FS		:= $(wildcard fs/*.c)
+SRC_DRIVER	:= $(wildcard drivers/*.c)
 
-VPATH		:= kernel:mm:init:fs:arch/$(ARCH)/platform/$(PLATFORM):arch/$(ARCH)/board/$(BOARD):arch/$(ARCH)/kernel
+VPATH		:= kernel:mm:init:fs:drivers:arch/$(ARCH)/platform/$(PLATFORM):arch/$(ARCH)/board/$(BOARD):arch/$(ARCH)/kernel
 
 .SUFFIXES:
 .SUFFIXES: .S .c
@@ -49,10 +51,11 @@ OBJ_PLATFORM	+= $(addprefix $(OUT_PLATFORM)/, $(patsubst %.S,%.o, $(notdir $(SRC
 OBJ_BOARD	+= $(addprefix $(OUT_BOARD)/, $(patsubst %.c,%.o, $(notdir $(SRC_BOARD_C))))
 OBJ_BOARD	+= $(addprefix $(OUT_BOARD)/, $(patsubst %.S,%.o, $(notdir $(SRC_BOARD_S))))
 OBJ_FS		+= $(addprefix $(OUT_FS)/, $(patsubst %.c,%.o, $(notdir $(SRC_FS))))
+OBJ_DRIVER	+= $(addprefix $(OUT_DRIVER)/, $(patsubst %.c,%.o, $(notdir $(SRC_DRIVER))))
 
-OBJECT		= $(OUT_ARCH)/boot.o $(OBJ_ARCH) $(OBJ_PLATFORM) $(OBJ_BOARD) $(OBJ_KERNEL) $(OBJ_FS)
+OBJECT		= $(OUT_ARCH)/boot.o $(OBJ_ARCH) $(OBJ_PLATFORM) $(OBJ_BOARD) $(OBJ_KERNEL) $(OBJ_FS) $(OBJ_DRIVER)
 
-all: $(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD) $(OUT_FS) $(boot_bin)
+all: $(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD) $(OUT_FS) $(OUT_DRIVER) $(boot_bin)
 
 $(boot_bin) : $(boot_elf)
 	$(OBJ_COPY) -O binary $(boot_elf) $(boot_bin)
@@ -61,7 +64,7 @@ $(boot_bin) : $(boot_elf)
 $(boot_elf) : $(OBJECT) $(LDS)
 	$(LD) $(LDFLAG) -o $(boot_elf) $(OBJECT) $(LDPATH)
 
-$(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD) $(OUT_FS):
+$(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD) $(OUT_FS) $(OUT_DRIVER):
 	@echo $@
 	@mkdir -p $@
 	@mkdir -p ramdisk
@@ -84,6 +87,9 @@ $(OUT_KERNEL)/%.o: %.c $(INCLUDE_DIR)
 $(OUT_FS)/%.o: %.c $(INCLUDE_DIR)
 	$(CC) $(CCFLAG) -c $< -o $@
 
+$(OUT_DRIVER)/%.o: %.c $(INCLUDE_DIR)
+	$(CC) $(CCFLAG) -c $< -o $@
+
 $(OUT_PLATFORM)/%.o : %.c $(INCLUDE_DIR) arch/$(ARCH)/platform/$(PLATFORM)/include/*.h
 	$(CC) $(CCFLAG) -c $< -o $@
 
@@ -91,9 +97,6 @@ $(OUT_PLATFORM)/%.o : %.S $(INCLUDE_DIR) arch/$(ARCH)/platform/$(PLATFORM)/inclu
 	$(CC) $(CCFLAG) -c $< -o $@
 
 $(OUT_BOARD)/%.o : %.c $(INCLUDE_DIR) 
-	$(CC) $(CCFLAG) -c $< -o $@
-
-$(OUT_BOARD)/%.o : %.S $(INCLUDE_DIR) 
 	$(CC) $(CCFLAG) -c $< -o $@
 
 application/mklmfs/mklmfs: application/mklmfs/mklmfs.c

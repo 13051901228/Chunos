@@ -466,25 +466,6 @@ out:
 
 int vfs_stat(struct file *file, struct stat *stat)
 {
-	struct fnode *fnode = file->fnode;
-
-	stat->st_dev = fnode->dev;
-	stat->st_ino = (unsigned long)fnode;
-	stat->st_mode = fnode->mode;
-	stat->st_nlink = fnode->nlinks;
-	stat->st_uid = fnode->uid;
-	stat->st_gid = fnode->gid;
-	stat->st_rdev = 0;
-	stat->st_size = fnode->data_size;
-	stat->st_blksize = fnode->blk_size;
-	stat->st_blocks = fnode->blk_cnt;
-	stat->st_atime = fnode->atime;
-	stat->st_mtime = fnode->mtime;
-	stat->st_atime_nsec = 0;
-	stat->st_mtime_nsec = 0;
-	stat->st_ctime = fnode->ctime;
-	stat->st_ctime_nsec = 0;
-
 	return 0;
 }
 
@@ -496,4 +477,5 @@ struct file_operations vfs_ops = {
 	.mmap	= vfs_mmap,
 	.seek	= vfs_seek,
 	.close	= vfs_close,
+	.stat	= vfs_stat,
 };

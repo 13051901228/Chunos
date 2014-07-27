@@ -2,7 +2,6 @@
 #define _PRINTK_H
 
 int uart_puts(char *buf);
-int printk(const char *fmt, ...);
 int level_printk(const char *fmt, ...);
 
 #define	pr_debug(module, fmt, ...)		level_printk("4""<D>" module fmt, ##__VA_ARGS__)
@@ -16,5 +15,7 @@ int level_printk(const char *fmt, ...);
 #define kernel_warning(fmt, ...)	pr_warning("[ KERN: ]", fmt, ##__VA_ARGS__)
 #define kernel_error(fmt, ...)		pr_error("[ KERN: ]", fmt, ##__VA_ARGS__)
 #define kernel_fatal(fmt, ...)		pr_fatal("[ KERN: ]", fmt, ##__VA_ARGS__)
+
+#define printk	kernel_info
 
 #endif

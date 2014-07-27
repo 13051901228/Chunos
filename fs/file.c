@@ -61,12 +61,16 @@ struct file *__sys_open(char *name, int flag)
 
 	file->fnode = fnode;
 	file->offset = 0;
-	file->f_type = DT_BLK;
+	file->f_type = fnode->type;
 	file->f_flag = flag;
 	file->private_data = NULL;
-	file->fops = &vfs_ops;
+
+	if (file->f_type == DT_CHR)
+		file->fops = get_device_fops(file);
+	else
+		file->fops = &vfs_ops;
 	
-	if (file->fops->open) {
+	if (file->fops && file->fops->open) {
 		if (file->fops->open(file, flag)) {
 			release_file(file);
 			return NULL;
@@ -244,12 +248,32 @@ int _sys_stat(char *path, struct stat *stat)
 {
 	struct file *file = NULL;
 	int ret;
+	struct fnode *fnode;
 
 	file = kernel_open(path, O_RDONLY);
 	if (!file)
 		return -ENOENT;
 
-	ret = vfs_stat(file, stat);
+	stat->st_dev = fnode->dev;
+	stat->st_ino = (unsigned long)fnode;
+	stat->st_mode = fnode->mode;
+	stat->st_nlink = fnode->nlinks;
+	stat->st_uid = fnode->uid;
+	stat->st_gid = fnode->gid;
+	stat->st_rdev = 0;
+	stat->st_size = fnode->data_size;
+	stat->st_blksize = fnode->blk_size;
+	stat->st_blocks = fnode->blk_cnt;
+	stat->st_atime = fnode->atime;
+	stat->st_mtime = fnode->mtime;
+	stat->st_atime_nsec = 0;
+	stat->st_mtime_nsec = 0;
+	stat->st_ctime = fnode->ctime;
+	stat->st_ctime_nsec = 0;
+
+	if (file->fops->stat)
+		file->fops->stat(file, stat);
+
 	kernel_close(file);
 
 	return ret;
