@@ -10,6 +10,7 @@
 #include <os/fnode.h>
 #include <os/vfs.h>
 #include <sys/stat.h>
+#include <os/device.h>
 
 extern struct file_operations vfs_ops;
 
@@ -253,6 +254,7 @@ int _sys_stat(char *path, struct stat *stat)
 	file = kernel_open(path, O_RDONLY);
 	if (!file)
 		return -ENOENT;
+	fnode = file->fnode;
 
 	stat->st_dev = fnode->dev;
 	stat->st_ino = (unsigned long)fnode;

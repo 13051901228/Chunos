@@ -2,7 +2,7 @@
 
 int init_task(void *arg)
 {
-	kernel_exec("/init");
+	kernel_exec("/bin/init");
 
 	return 0;
 }

@@ -327,7 +327,7 @@ static int write_inode(struct file_buffer *fb)
 	if (fb->data)
 		flush_data(data_buffer, fb->data);
 
-	printf("lvl1 %d buf[0] %d\n", fb->lvl1, block_buffer[0]);
+	debug("lvl1 %d buf[0] %d\n", fb->lvl1, block_buffer[0]);
 	if (fb->lvl1)
 		flush_data((char *)block_buffer, fb->lvl1);
 	

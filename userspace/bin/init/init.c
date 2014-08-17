@@ -53,7 +53,7 @@ int main(int argc, char **argv)
 	munmap(start, 4096);
 	munmap(start1, 4 * 4096);
 
-	fd = open("/test", 0);
+	fd = open("/bin/test", 0);
 	if (fd >= 0) {
 		printf("fd is %d\n", fd);
 		start = mmap(NULL, 33, 0, 0, fd, 0);
@@ -66,7 +66,7 @@ int main(int argc, char **argv)
 		munmap(start, 33);
 	}
 
-	if (!stat("/test", &s_stat)) {
+	if (!stat("/bin/test", &s_stat)) {
 		printf("stat.mode is %x\n", s_stat.st_mode);
 		printf("stat.ino is %x\n", s_stat.st_ino);
 	}
@@ -76,7 +76,6 @@ int main(int argc, char **argv)
 		printf("stat.ino is %x\n", s_stat.st_ino);
 	}
 
-	while (1);
 	printf("size of linux_dirent is %d\n", sizeof(struct linux_dirent));
 	dir = opendir("/");
 	if (!dir) {
@@ -91,8 +90,6 @@ int main(int argc, char **argv)
 		}
 	} while (dent);
 
-	while(1);
-
 	pid = fork();
 	if (pid == 0) {
 		while (1) {
@@ -103,7 +100,7 @@ int main(int argc, char **argv)
 	}
 	else {
 		printf("this is child %d\n", pid);
-		ret = execve("/test", arg, env);
+		ret = execve("/bin/test", arg, env);
 		printf("Failed to exec test\n");
 	}
 

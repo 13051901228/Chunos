@@ -22,6 +22,8 @@ OUT_PLATFORM 	= $(OUT)/$(PLATFORM)
 OUT_BOARD 	= $(OUT)/$(BOARD)
 OUT_FS		= $(OUT)/fs
 OUT_DRIVER	= $(OUT)/drivers
+OUT_RAMDISK	= $(OUT)/ramdisk
+OUT_TOOLS	= $(OUT)/tools
 
 boot_elf 	:= $(OUT)/boot.elf
 boot_bin 	:= $(OUT)/boot.bin
@@ -65,9 +67,9 @@ $(boot_elf) : $(OBJECT) $(LDS)
 	$(LD) $(LDFLAG) -o $(boot_elf) $(OBJECT) $(LDPATH)
 
 $(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD) $(OUT_FS) $(OUT_DRIVER):
-	@echo $@
-	@mkdir -p $@
-	@mkdir -p ramdisk
+	@ mkdir -p $@
+	@ mkdir -p $(OUT_TOOLS)
+	@ mkdir -p $(OUT_RAMDISK)
 
 out/$(ARCH)/arch_ramdisk.o: arch/$(ARCH)/kernel/arch_ramdisk.S $(INCLUDE_DIR) out/ramdisk.img
 	$(CC) $(CCFLAG) -c $< -o $@
@@ -99,24 +101,20 @@ $(OUT_PLATFORM)/%.o : %.S $(INCLUDE_DIR) arch/$(ARCH)/platform/$(PLATFORM)/inclu
 $(OUT_BOARD)/%.o : %.c $(INCLUDE_DIR) 
 	$(CC) $(CCFLAG) -c $< -o $@
 
-application/mklmfs/mklmfs: application/mklmfs/mklmfs.c
-	gcc -o application/mklmfs/mklmfs application/mklmfs/mklmfs.c
+$(OUT_TOOLS)/mklmfs: tools/mklmfs/mklmfs.c tools/mklmfs/lmfs.h tools/mklmfs/types.h
+	gcc -o $(OUT_TOOLS)/mklmfs tools/mklmfs/mklmfs.c
 
-out/ramdisk.img: ramdisk/ application/mklmfs/mklmfs
-	./application/mklmfs/mklmfs ramdisk out/ramdisk.img
+$(OUT)/ramdisk.img: $(OUT_RAMDISK) $(OUT_TOOLS)/mklmfs
+	@ $(OUT_TOOLS)/mklmfs $(OUT_RAMDISK) out/ramdisk.img
 
 .PHONY: clean run app
 
 clean:
-	rm -rf $(OBJECT)
-	rm -f application/mklmfs/mklmfs
-	rm -rf ramdisk
-	cd application/diet-libc && make clean
-	@rm -rf out
-	@echo "All build has been cleaned"
+	@ rm -rf out
+	@ echo "All build has been cleaned"
 
 run:
-	@cd application/skyeye && skyeye -c ./skyeye.conf
+	@ cd tools/skyeye && skyeye -c ./skyeye.conf
 
 app:
-	cd application/diet-libc/ && make
+	cd userspace/bin/ && make
