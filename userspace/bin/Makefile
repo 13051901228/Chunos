@@ -17,8 +17,8 @@ RAMDISK_BIN 	:= ../../out/ramdisk/bin
 LDS 		:= $(shell pwd)/app.lds
 CCFLAG 		:= -nostdlib -fno-builtin -I$(INCLUDE_DIR)
 LDFLAG 		:= -T$(LDS) -nostdlib
-LDPATH 		:= -ldietlibc -lm -lgcc -L$(LIBS_DIR)
-LDLIBS		:= $(LIBS_DIR)/_start.o $(LIBS_DIR)/exit.o $(LIBS_DIR)/lib.o
+LDPATH 		:= -ldietlibc -lgcc -lm -L$(LIBS_DIR)
+LDLIBS		:= $(LIBS_DIR)/start.o $(LIBS_DIR)/raise.o $(LIBS_DIR)/__aeabi_unwind_cpp.o
 
 #OBJ_DIRS	: find all the directory which may contains an application
 #target_tmp	: tmp target list 

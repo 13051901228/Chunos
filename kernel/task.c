@@ -314,7 +314,7 @@ int mmap(struct task_struct *task, unsigned long start,
 
 	i = (start - PROCESS_USER_MMAP_BASE) / SIZE_NM(4);
 	j = ((start - PROCESS_USER_MMAP_BASE) % SIZE_NM(4)) / PAGE_SIZE;
-	kernel_debug("mmap start:0x%x 0x%x i:%d j:%d\n", start, virt, i, j);
+	debug("mmap start:0x%x 0x%x i:%d j:%d\n", start, virt, i, j);
 
 	do {
 		list = list_next(list);
@@ -358,7 +358,7 @@ int munmap(struct task_struct *task, unsigned long start, int pages)
 	bit_start = (start - PROCESS_USER_MMAP_BASE) / PAGE_SIZE;
 	i = (start - PROCESS_USER_MMAP_BASE) / SIZE_NM(4);
 	j = ((start - PROCESS_USER_MMAP_BASE) % SIZE_NM(4)) / PAGE_SIZE;
-	kernel_debug("mmap start:0x%x i:%d j:%d\n", start, i, j);
+	debug("mmap start:0x%x i:%d j:%d\n", start, i, j);
 	
 	do {
 		list = list_next(list);
@@ -389,7 +389,7 @@ int munmap(struct task_struct *task, unsigned long start, int pages)
 		/* get the va of the mem */
 		buffer = *page_table & 0xfffff000;
 		buffer = pa_to_va(buffer);
-		kernel_debug("umap memory is 0x%x\n", buffer);
+		debug("umap memory is 0x%x\n", buffer);
 
 		tmp = va_to_page(buffer);
 		list_del(&tmp->plist);
@@ -431,7 +431,7 @@ void *get_task_user_mm_free_base(struct task_struct *task, int page_nr)
 	k = i % 1024;
 
 	start = PROCESS_USER_MMAP_BASE + (j * SIZE_NM(4)) + (k * PAGE_SIZE);
-	kernel_debug("find user mm: start:%x j:%d k:%d\n", start, j, k);
+	debug("find user mm: start:%x j:%d k:%d\n", start, j, k);
 
 	/* mask the memory will be used */
 	for (j = 0; j < page_nr; j++) {
@@ -667,17 +667,34 @@ int switch_task(struct task_struct *cur,
 	return 0;
 }
 
-static int setup_task_argv(struct task_struct *task,
-			    char **argv)
+static int setup_task_argv_envp(struct task_struct *task,
+			    char **argv, char **envp)
 {
-	char *argv_base = (char *)(PROCESS_USER_BASE + MAX_ARGV * sizeof(void *));
+	char *argv_base = (char *)(PROCESS_USER_BASE);
 	int i, length;
 	struct list_head *list = &task->mm_struct.elf_image_list;
+	struct list_head *slist = &task->mm_struct.elf_stack_list;
 	unsigned long load_base;
 	u32 *table_base;
+	int argv_sum = 0;
+	int env_sum = 0;
 
-	if (!argv)
+	if (task->flag & PROCESS_TYPE_KERNEL)
 		return -EINVAL;
+
+	for (i = 0; ; i++) {
+		if (argv[i])
+			argv_sum++;
+		else
+			break;
+	}
+
+	for (i = 0; ; i++) {
+		if (envp[i])
+			env_sum++;
+		else
+			break;
+	}
 
 	/*
 	 * copy the argument to the process memory space
@@ -686,23 +703,37 @@ static int setup_task_argv(struct task_struct *task,
 	 * address and load base is kernel space address.
 	 */
 	list = list_next(list);
-	load_base =page_to_va(list_entry(list, struct page, plist));
-	table_base = (u32 *)load_base;
-	load_base = load_base + ((unsigned long)argv_base - PROCESS_USER_BASE);
-	for (i = 0; i < MAX_ARGV; i++) {
-		if (argv[i] == NULL)
-			break;
+	slist = list_next(slist);
+	load_base = page_to_va(list_entry(list, struct page, plist));
+	table_base = (u32 *)page_to_va(list_entry(slist, struct page, plist));
+	table_base = table_base - (argv_sum + env_sum + 1);
+
+	*table_base = argv_sum;
+	table_base++;
+
+	for (i = 0; i < argv_sum; i++) {
 		length = strlen(argv[i]);
 		strcpy((char *)load_base, argv[i]);
 		*table_base = (unsigned long)argv_base;
-		argv_base += length;
+		argv_base += length;	/* argv[i] address in userspace */
 		load_base += length;
 		table_base++;
 		argv_base = (char *)baligin((u32)argv_base, 4);
 		load_base = baligin(load_base, 4);
 	}
 
-	return 0;
+	for (i = 0; i < env_sum; i++) {
+		length = strlen(envp[i]);
+		strcpy((char *)load_base, argv[i]);
+		*table_base = (unsigned long)argv_base;
+		argv_base += length;	/* argv[i] address in userspace */
+		load_base += length;
+		table_base++;
+		argv_base = (char *)baligin((u32)argv_base, 4);
+		load_base = baligin(load_base, 4);
+	}
+
+	return (argv_sum + env_sum + 1) * sizeof(unsigned long);
 }
 
 static int inline set_task_return_value(pt_regs *reg,
@@ -855,7 +886,8 @@ int load_elf_section(struct elf_section *section,
 		page = list_entry(list, struct page, plist);
 		base_addr = (char *)page->free_base;
 		base_addr = base_addr + j;
-		j = k >= PAGE_SIZE ? PAGE_SIZE -j : k;
+		i = PAGE_SIZE -j;
+		j = k >= i ? PAGE_SIZE -j : k;
 		if (strncmp(section->name, ".bss", 4)) {
 			debug("Load Section:[%s] address:[0x%x] size[0x%x]\n",
 				     section->name, base_addr, j);
@@ -981,6 +1013,7 @@ int do_exec(char __user *name,
 	struct file *file;
 	int err = 0;
 	struct elf_file *elf = NULL;
+	int ae_size;
 
 	if (current->flag & PROCESS_TYPE_KERNEL) {
 		/*
@@ -1028,8 +1061,8 @@ int do_exec(char __user *name,
 	flush_cache();
 
 	/* modify the regs for new process. */
-	init_pt_regs(regs, NULL, (void *)argv);
-	setup_task_argv(new, argv);
+	ae_size = setup_task_argv_envp(new, argv, envp);
+	init_pt_regs(regs, NULL, ae_size);
 
 	/*
 	 * fix me - whether need to do this if exec
