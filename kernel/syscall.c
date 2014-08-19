@@ -53,7 +53,7 @@ int syscall_init(void)
 	syscall_table_base = get_free_pages(pages, GFP_KERNEL);
 	kernel_debug("syscall table base is 0x%x\n", (u32)syscall_table_base);
 	if (!syscall_table_base) {
-		panic("can not allocate memory for syscall table\n");
+		panic("can not allocate memory for syscall table\n", 0);
 	}
 	memset((char *)syscall_table_base, 0, pages << PAGE_SHIFT);
 

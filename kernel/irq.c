@@ -141,7 +141,7 @@ int irq_init(void)
 			irq_chip->irq_init(irq_chip);
 	}
 	else {
-		panic("No irq chip found\n");
+		panic("No irq chip found\n", 0);
 	}
 
 	return 0;
