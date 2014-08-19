@@ -44,7 +44,7 @@ software_interrupt:
 	push {r0-r12}
 
 	mrs r0, cpsr		@ get user_sp user_lr usr_spsr
-	set_mode SYSTEM_MODE | NO_INT
+	set_mode (SYSTEM_MODE | NO_INT)
 	mov r1, sp
 	mov r2, lr
 	msr cpsr, r0
@@ -72,13 +72,13 @@ software_interrupt:
 
 	mov r0, sp
 
-	set_mode SYSTEM_MODE | NO_INT
+	set_mode (SYSTEM_MODE | NO_INT)
 	ldr r2, [r0, #60]	@ restore user_sp
 	mov sp, r2
 
 	ldr r2, [r0, #56]	@ restore user_lr
 	mov lr, r2
-	set_mode SVC_MODE | NO_INT
+	set_mode (SVC_MODE | NO_INT)
 
 	ldr r1, [sp, #64]
 	msr spsr, r1
@@ -101,14 +101,17 @@ prefetch_abort:
 
 	and r0, lr, #MODE_MASK
 	cmp r0, #SVC_MODE
-	bleq svc_to_irq
+	bleq svc_to_exception
+
+	cmp r0, #USER_MODE
+	bleq user_to_exception
 
 	str r4, [sp, #60]
 	str r3, [sp, #56]
 	str r2, [sp, #52]
 
 	mov r0, sp
-	b data_abort_handler
+	b prefetch_abort_handler	@ will never return now
 
 	.align 5
 data_abort:
@@ -123,14 +126,17 @@ data_abort:
 
 	and r0, lr, #MODE_MASK
 	cmp r0, #SVC_MODE
-	bleq svc_to_irq
+	bleq svc_to_exception
+
+	cmp r0, #USER_MODE
+	bleq user_to_exception
 
 	str r4, [sp, #60]
 	str r3, [sp, #56]
 	str r2, [sp, #52]
 
 	mov r0, sp
-	b data_abort_handler
+	b data_abort_handler		@ will never return until now, will add feature later.
 
 	.align 5
 not_used:
@@ -154,13 +160,13 @@ irq:
 
 	and r0, lr, #MODE_MASK	@ if enter irq from user mode 
 	cmp r0, #USER_MODE
-	bleq user_to_irq
+	bleq user_to_exception
 
 	cmp r0, #SVC_MODE
-	bleq svc_to_irq		@ if enter irq from svc mode
+	bleq svc_to_exception		@ if enter irq from svc mode
 	
 	mov r1, sp		@ save sp of irq to r1 and goto svc mode
-	msr cpsr, #SVC_MODE | NO_INT	@ r0= r1= r2=spsr r3=lr r4=sp
+	set_mode (SVC_MODE | NO_INT)	@ r0= r1= r2=spsr r3=lr r4=sp
 
 	sub sp, sp, #20			@ reserve for pc cpsr spsr lr sp
 	push {r5-r12}			@ save r5-r12
@@ -182,7 +188,7 @@ irq:
 	str r3, [sp, #56]		@ lr
 	str r2, [sp, #52]		@ spsr
 
-	set_mode IRQ_MODE | NO_INT
+	set_mode (IRQ_MODE | NO_INT)
 
 	bl irq_handler			@ goto irq handler
 
@@ -192,10 +198,10 @@ irq:
 	and r1, r1, #MODE_MASK
 
 	cmp r1, #USER_MODE		@ if last mode is user mode
-	bleq exit_irq_from_user
+	bleq exit_exception_from_user
 
 	cmp r1, #SVC_MODE		@ if last mode is svc mode
-	bleq exit_irq_from_svc
+	bleq exit_exception_from_svc
 
 	ldr r1, [r0, #64]
 	msr spsr, r1
@@ -206,32 +212,33 @@ irq:
 	add lr, lr, #16			@ return to process
 	ldmfd lr!, {pc}^
 
-user_to_irq:
+user_to_exception:
 	mrs r1, cpsr		@ goto system mode to save some register
-	msr cpsr, #SYSTEM_MODE | NO_INT
+	set_mode (SYSTEM_MODE | NO_INT)
 
 	mov r2, #0		@ spsr, user mode no spsr, set it to 0
 	mov r3, lr		@ lr in user mode
 	mov r4, sp		@ lr in user mode
 
-	msr cpsr, r1		@return to irq mode
+	msr cpsr_c, r1		@return to previous mode
 
 	mov pc, lr
 
-svc_to_irq:
+svc_to_exception:
 	mrs r1, cpsr		@ goto svc mode
-	msr cpsr, #SVC_MODE | NO_INT
+	set_mode (SVC_MODE | NO_INT)
 
 	mrs r2, spsr		@ spsr in svc mode
 	mov r3, lr		@ lr in svc mode
 	mov r4, sp		@ sp in svc mode
 
-	msr cpsr, r1		@ return to irq mode
+	msr cpsr_c, r1		@ return to previous mode
 
 	mov pc, lr
 
-exit_irq_from_user:		@ r0 is the address of process context
-	set_mode SYSTEM_MODE | NO_INT
+exit_exception_from_user:		@ r0 is the address of process context
+	mrs r3, cpsr
+	set_mode (SYSTEM_MODE | NO_INT)
 	
 	ldr r2, [r0, #60]	@ sp
 	mov sp, r2
@@ -239,14 +246,16 @@ exit_irq_from_user:		@ r0 is the address of process context
 	ldr r2, [r0, #56]	@ lr
 	mov lr, r2
 
-	set_mode SVC_MODE | NO_INT
+	set_mode (SVC_MODE | NO_INT)
 	add sp, r0, #72		@ svc sp for user space to call syscall
 
-	set_mode IRQ_MODE | NO_INT
+	msr cpsr_c, r3
+
 	mov pc, lr
 
-exit_irq_from_svc:		@r0 is the address of process context
-	set_mode SVC_MODE | NO_INT
+exit_exception_from_svc:		@r0 is the address of process context
+	mrs r3, cpsr
+	set_mode (SVC_MODE | NO_INT)
 
 	add sp, r0, #72
 
@@ -256,7 +265,8 @@ exit_irq_from_svc:		@r0 is the address of process context
 	ldr r2, [r0, #52]
 	msr spsr, r2
 
-	set_mode IRQ_MODE | NO_INT
+	msr cpsr_c, r3
+
 	mov pc, lr
 
 	.align 5

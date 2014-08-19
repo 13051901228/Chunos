@@ -165,7 +165,7 @@ int __init_text soc_early_init(void)
 
 	ret = find_system_soc(soc);
 	if (ret)
-		panic("Unsupport soc and platform\n");
+		panic("Unsupport soc and platform\n", 0);
 
 	soc_get_mem_info(soc);
 
