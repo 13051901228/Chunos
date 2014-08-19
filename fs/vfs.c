@@ -398,7 +398,6 @@ int vfs_getdents(struct file *file, char *buffer, size_t count)
 	char *data_buffer = fnode->data_buffer;
 	struct filesystem *fs = fnode_get_filesystem(fnode);
 	size_t handle_size = 0;
-	int i;
 	int err = 0;
 	struct os_dirent *dent;
 
@@ -413,10 +412,7 @@ int vfs_getdents(struct file *file, char *buffer, size_t count)
 			(fnode->current_block == 0))
 		return -ENOSPC;
 
-	/* how many dir ent can fill into the buffer */
-	dent_count = count / (sizeof(struct os_dirent) + 256);
-
-	for (i = 0; i < dent_count; i++) {
+	while ((dent_count + sizeof(struct os_dirent) + 256) < count) {
 
 		dent = (struct os_dirent *)buffer;
 		memset(&dent->d_name[1], 0, 256);
@@ -438,12 +434,12 @@ int vfs_getdents(struct file *file, char *buffer, size_t count)
 			dent->d_off = file->offset;
 			dent->d_reclen = err + sizeof(struct os_dirent);
 
+			dent->d_reclen = baligin(dent->d_reclen, 4);
+
 			sum += dent->d_reclen;
 			buffer += dent->d_reclen;
+			dent_count += dent->d_reclen;
 		}
-
-		kernel_debug("%s handle_size:%d f_o:%x rw:%d d_reclen%d\n", __func__,
-				sizeof(struct os_dirent), file->offset, fnode->rw_pos, dent->d_reclen);
 
 		if (fnode->rw_pos >= fnode->buffer_size) {
 			/* read the next block data */
@@ -460,7 +456,6 @@ int vfs_getdents(struct file *file, char *buffer, size_t count)
 	}
 
 out:
-	kernel_debug("find file:%d size:%d\n", i, sum);
 	return sum;
 }
 
