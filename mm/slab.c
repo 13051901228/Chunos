@@ -178,9 +178,11 @@ repet:
 
 	/* get the slab_header to find the free memory */
 	header = list_entry(list, struct slab_header, slab_list);
+	pg = va_to_page((unsigned long)header);
 
 	/* check whether the page has been released. */
-	if (!page_state(va_to_page_id((unsigned long)header))) {
+	if (!page_state(va_to_page_id((unsigned long)header)) ||
+		!(pg->flag & __GFP_SLAB)) {
 		debug("page has been released 0x%x\n",
 			      (u32)header + SLAB_HEADER_SIZE);
 		list = list_next(list);
@@ -192,7 +194,6 @@ repet:
 	 * update the page information delete slab from
 	 * cache list add slab to page list
 	 */
-	pg = va_to_page((unsigned long)header);
 	remove_slab_from_list(header);
 	add_slab_to_page(pg, header);
 
@@ -237,13 +238,14 @@ static void *get_kernel_slab(int size, unsigned long flag)
 	struct page *pg;
 	int leave_size = 0;
 	struct slab_header *header;
+	size_t new_size = get_new_alloc_size(size);
 
 	if (pslab->page_nr >= SLAB_POOL_MAX_PAGE) {
 		kernel_error("No enough memory in slab pool\n");
 		return NULL;
 	}
 
-	if (is_aligin(size, PAGE_SIZE)) {
+	if (is_aligin(size, PAGE_SIZE) || is_aligin(new_size, PAGE_SIZE)) {
 		base = (unsigned long)get_free_pages(page_nr(size), flag);
 		if (!base)
 			return NULL;
@@ -252,9 +254,10 @@ static void *get_kernel_slab(int size, unsigned long flag)
 		return (void *)base;
 	}
 
-	size = get_new_alloc_size(size);
 	count = page_nr(size);
 	leave_size = size - (count - 1) * PAGE_SIZE;
+	leave_size = get_new_alloc_size(leave_size);
+
 	base = (unsigned long )get_free_pages(count, flag);
 	if (!base) {
 		mm_error("get memory faile at get_kernel_slab\n");
@@ -270,7 +273,7 @@ static void *get_kernel_slab(int size, unsigned long flag)
 	 */
 	if (count > 1) {
 		pg = va_to_page(base);
-		set_page_count(pg, get_page_count(pg) - 1);
+		set_page_count(pg, count - 1);
 		set_page_extra_size(pg, leave_size);
 	}
 
@@ -386,9 +389,6 @@ static void free_slice_slab(void *addr)
 
 	remove_slab_from_page(header);
 	add_slab_to_list(header);
-	usage = page_put(pg);
-	if (!usage)
-		pslab->page_nr--;
 }
 
 static void free_page_slab(void *addr)
@@ -404,6 +404,12 @@ static void free_page_slab(void *addr)
 	pslab->page_nr -= count;
 
 	if (size) {
+		/*
+		 * if __GFP_SLAB is not set, it means this page is allocated
+		 * using get_free_pages or get_free_page
+		 */
+		if (!(get_page_flag(last_page) & __GFP_SLAB))
+			return;
 		header = (struct slab_header *)page_to_va(last_page);
 		init_slab_header(header, size);
 		free_slice_slab(header_to_base(header));
@@ -429,7 +435,6 @@ void kfree(void *addr)
 	if (flag & __GFP_SLAB)
 		free_slice_slab(addr);
 	else {
-
 		if (!is_aligin((unsigned long)addr, PAGE_SIZE))
 			return;
 
