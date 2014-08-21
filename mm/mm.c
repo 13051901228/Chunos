@@ -617,15 +617,10 @@ int page_get(struct page *pg)
 
 int page_put(struct page *pg)
 {
-	int usage;
-
-	pg->usage--;
-	usage = pg->usage;
-	if (pg->usage == 0) {
+	if (!(--pg->usage))
 		free_pages((void *)page_to_va(pg));
-	}
 	
-	return usage;
+	return pg->usage;
 }
 
 static struct page *init_pages(u32 index, int count, unsigned long flag)
@@ -801,6 +796,7 @@ static void __free_pages(struct page *pg, struct mm_zone *zone)
 	int index = 0;
 	int count = 0;
 	index = page_to_page_id(pg);
+	int i;
 	
 	mutex_lock(&zone->zone_mutex);
 
@@ -808,6 +804,11 @@ static void __free_pages(struct page *pg, struct mm_zone *zone)
 	update_memory_bitmap(index, count, 0);
 	zone->free_size += count * PAGE_SIZE;
 	zone->free_pages += count;
+
+	for (i = 0; i < count; i++) {
+		pg->flag = 0;
+		pg++;
+	}
 
 	update_bm_current(zone);
 
