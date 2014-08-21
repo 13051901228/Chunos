@@ -364,12 +364,12 @@ int arch_set_task_return_value(pt_regs *reg,
 
 void data_abort_handler(unsigned long sp)
 {
-	panic("Data aboart exception\n", sp);
+	panic("Data aboart exception", sp);
 }
 
 void prefetch_abort_handler(unsigned long sp)
 {
-	panic("Prefetch abort exception\n", sp);
+	panic("Prefetch abort exception", sp);
 }
 
 void arch_set_mode_stack(u32 base, u32 mode)
