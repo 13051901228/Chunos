@@ -100,7 +100,6 @@ static struct slab_header *get_slab_from_page(struct page *pg, int size)
 		header = (struct slab_header *)free_base;
 		init_slab_header(header, size);
 		update_page(pg, free_base + size, free_size - size);
-		page_get(pg);
 	}
 	
 	return header;
@@ -183,7 +182,7 @@ repet:
 	/* check whether the page has been released. */
 	if (!page_state(va_to_page_id((unsigned long)header)) ||
 		!(pg->flag & __GFP_SLAB)) {
-		debug("page has been released 0x%x\n",
+		kernel_warning("page has been released 0x%x\n",
 			      (u32)header + SLAB_HEADER_SIZE);
 		list = list_next(list);
 		remove_slab_from_list(header);
