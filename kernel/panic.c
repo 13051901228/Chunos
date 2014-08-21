@@ -10,7 +10,7 @@ static void dump_register(unsigned long sp)
 
 void panic(char *str, unsigned long sp)
 {
-	kernel_fatal("PANIC: caused by %s loop forever.\n", str);
+	kernel_fatal("PANIC: caused by %s loop forever\n", str);
 
 	dump_register(sp);
 
