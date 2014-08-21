@@ -473,7 +473,6 @@ static void dump_memory_info(void)
 
 static void clear_user_tlb(void)
 {
-
 	clear_tlb_entry(0x0, 2048);
 }
 
@@ -606,21 +605,6 @@ struct page *pa_to_page(unsigned long pa)
 unsigned long va_to_pa(unsigned long va)
 {
 	return page_to_pa(va_to_page(va));
-}
-
-int page_get(struct page *pg)
-{
-	pg->usage++;
-
-	return pg->usage;
-}
-
-int page_put(struct page *pg)
-{
-	if (!(--pg->usage))
-		free_pages((void *)page_to_va(pg));
-	
-	return pg->usage;
 }
 
 static struct page *init_pages(u32 index, int count, unsigned long flag)
