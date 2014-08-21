@@ -10,7 +10,8 @@
 #include <os/tty.h>
 
 #define TTY_NR	8
-static struct tty *tty_table[TTY_NR];
+static struct tty *tty_table[TTY_NR] = { 0 };
+DECLARE_BITMAP(tty_bitmap, TTY_NR);
 
 static int tty_open(struct file *file, int flag)
 {
@@ -62,19 +63,21 @@ struct tty *allocate_tty(void)
 	int minor = -1;
 	struct tty *tty;
 	struct device *dev;
+	unsigned long flags;
 
+	lock_kernel_irqsave(&flags);
 	for (i = 0; i < TTY_NR; i++) {
-		if (tty_table[i] == NULL) {
+		if (!read_bit(tty_bitmap, i)) {
 			minor = i;
+			set_bit(tty_bitmap, i);
 			break;
 		}
 	}
+	unlock_kernel_irqstore(&flags);
 
-	if (i < 0)
+	if (minor < 0)
 		return NULL;
 	
-	tty_table[i] = (struct tty *)0x12345678;
-
 	dev = alloc_device(TTY_MAJOR, minor);
 	if (!dev)
 		return NULL;
@@ -86,7 +89,7 @@ struct tty *allocate_tty(void)
 
 	tty->dev = dev;
 	tty->tty_ops = NULL;
-	tty->is_console = 1;
+	tty->is_console = 0;
 	spin_lock_init(&tty->tty_lock);
 
 	return tty;
@@ -129,6 +132,7 @@ static int tty_core_init(void)
 
 	memcpy(class->name, "ttyS", 4);
 	class->fops = &tty_fops;
+	init_bitmap(tty_bitmap, TTY_NR);
 	
 	err = register_chardev_class(class);
 	if (err) {
