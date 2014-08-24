@@ -146,7 +146,7 @@ static int vfs_read(struct file *file, char *buffer, size_t size)
 	file->offset += real_size;
 	fnode->rw_pos = (pos_in_buffer + real_size) % buffer_size;
 
-	kernel_debug("##### fnode_pos:%x file_pos:%x#####\n",
+	vfs_debug("##### fnode_pos:%x file_pos:%x#####\n",
 			fnode->rw_pos, file->offset);
 
 	return real_size;
@@ -294,7 +294,7 @@ static int vfs_seek(struct file *file, offset_t offset, int whence)
 	if (direction) {
 		if (!(fs->flag & FS_FOPS_PREV_BLOCK)) {
 			if (new_off > pos) {
-				kernel_debug("change the direction\n");
+				vfs_debug("change the direction\n");
 				new_off = file->offset - new_off;
 				fnode->rw_pos = pos = 0;
 				direction = 0; 
