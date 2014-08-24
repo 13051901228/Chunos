@@ -8,7 +8,7 @@ OBJ_DUMP 	:= $(CROSS_COMPILE)objdump
 PLATFORM	:= s3c2440
 BOARD		:= tq2440
 
-INCLUDE_DIR 	:= include/os/*.h include/asm/*.h include/config/*.h
+INCLUDE_DIR 	:= include/os/*.h include/asm/*.h include/config/*.h include/sys/*.h
 
 CCFLAG 		:=-Wall -nostdlib -fno-builtin -g -I$(PWD)/include
 LDS 		:= arch/$(ARCH)/kernel/lds/kernel.lds
@@ -24,6 +24,7 @@ OUT_FS		= $(OUT)/fs
 OUT_DRIVER	= $(OUT)/drivers
 OUT_RAMDISK	= $(OUT)/ramdisk
 OUT_TOOLS	= $(OUT)/tools
+OUT_SYSCALL 	= $(OUT)/syscall
 
 boot_elf 	:= $(OUT)/boot.elf
 boot_bin 	:= $(OUT)/boot.bin
@@ -38,8 +39,9 @@ SRC_BOARD_C	:= $(wildcard arch/$(ARCH)/board/$(BOARD)/*.c)
 SRC_BOARD_S	:= $(wildcard arch/$(ARCH)/board/$(BOARD)/*.S)
 SRC_FS		:= $(wildcard fs/*.c)
 SRC_DRIVER	:= $(wildcard drivers/*.c)
+SRC_SYSCALL	:= $(wildcard syscall/*.c)
 
-VPATH		:= kernel:mm:init:fs:drivers:arch/$(ARCH)/platform/$(PLATFORM):arch/$(ARCH)/board/$(BOARD):arch/$(ARCH)/kernel
+VPATH		:= kernel:mm:init:fs:drivers:syscall:arch/$(ARCH)/platform/$(PLATFORM):arch/$(ARCH)/board/$(BOARD):arch/$(ARCH)/kernel
 
 .SUFFIXES:
 .SUFFIXES: .S .c
@@ -54,10 +56,11 @@ OBJ_BOARD	+= $(addprefix $(OUT_BOARD)/, $(patsubst %.c,%.o, $(notdir $(SRC_BOARD
 OBJ_BOARD	+= $(addprefix $(OUT_BOARD)/, $(patsubst %.S,%.o, $(notdir $(SRC_BOARD_S))))
 OBJ_FS		+= $(addprefix $(OUT_FS)/, $(patsubst %.c,%.o, $(notdir $(SRC_FS))))
 OBJ_DRIVER	+= $(addprefix $(OUT_DRIVER)/, $(patsubst %.c,%.o, $(notdir $(SRC_DRIVER))))
+OBJ_SYSCALL	+= $(addprefix $(OUT_SYSCALL)/, $(patsubst %.c,%.o, $(notdir $(SRC_SYSCALL))))
 
-OBJECT		= $(OUT_ARCH)/boot.o $(OBJ_ARCH) $(OBJ_PLATFORM) $(OBJ_BOARD) $(OBJ_KERNEL) $(OBJ_FS) $(OBJ_DRIVER)
+OBJECT		= $(OUT_ARCH)/boot.o $(OBJ_ARCH) $(OBJ_PLATFORM) $(OBJ_BOARD) $(OBJ_KERNEL) $(OBJ_SYSCALL) $(OBJ_FS) $(OBJ_DRIVER)
 
-all: $(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD) $(OUT_FS) $(OUT_DRIVER) $(boot_bin)
+all: $(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD) $(OUT_FS) $(OUT_DRIVER) $(OUT_SYSCALL) $(boot_bin)
 
 $(boot_bin) : $(boot_elf)
 	$(OBJ_COPY) -O binary $(boot_elf) $(boot_bin)
@@ -66,7 +69,7 @@ $(boot_bin) : $(boot_elf)
 $(boot_elf) : $(OBJECT) $(LDS)
 	$(LD) $(LDFLAG) -o $(boot_elf) $(OBJECT) $(LDPATH)
 
-$(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD) $(OUT_FS) $(OUT_DRIVER):
+$(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD) $(OUT_FS) $(OUT_DRIVER) $(OUT_SYSCALL):
 	@ mkdir -p $@
 	@ mkdir -p $(OUT_TOOLS)
 	@ mkdir -p $(OUT_RAMDISK)
@@ -90,6 +93,9 @@ $(OUT_FS)/%.o: %.c $(INCLUDE_DIR)
 	$(CC) $(CCFLAG) -c $< -o $@
 
 $(OUT_DRIVER)/%.o: %.c $(INCLUDE_DIR)
+	$(CC) $(CCFLAG) -c $< -o $@
+
+$(OUT_SYSCALL)/%.o: %.c $(INCLUDE_DIR)
 	$(CC) $(CCFLAG) -c $< -o $@
 
 $(OUT_PLATFORM)/%.o : %.c $(INCLUDE_DIR) arch/$(ARCH)/platform/$(PLATFORM)/include/*.h
