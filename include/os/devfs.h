@@ -11,6 +11,7 @@
 struct devfs_node {
 	struct list_head child;
 	struct list_head list;
+	struct list_head *current_child;
 	int nr_child;
 	dev_t dev;
 	u32 create_ymd;
