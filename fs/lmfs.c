@@ -11,10 +11,10 @@
 #include <config/config.h>
 #include <os/init.h>
 
-#ifdef DEBUG_FS
-#define fs_debug(fmt, ...) kernel_debug(fmt, ##__VA_ARGS__)
+#ifdef DEBUG_LMFS
+#define lmfs_debug(fmt, ...) kernel_debug(fmt, ##__VA_ARGS__)
 #else
-#define fs_debug(fmt, ...)
+#define lmfs_debug(fmt, ...)
 #endif
 
 static struct lmfs_super_block *lmfs_super;
@@ -99,7 +99,7 @@ static void fnode_location(struct super_block *sb,
 	*i = index / 8;
 	*j = index % 8;
 	*i += lsb->fnode_start_block;
-	fs_debug("fnode location b:%d s:%d\n", *i, *j);
+	lmfs_debug("fnode location b:%d s:%d\n", *i, *j);
 }
 
 static int lmfs_pop_fnode(struct super_block *sb)
@@ -282,20 +282,20 @@ static int init_data_block_info(struct super_block *sb,
 	lfnode->pos_in_lvl0 = 0;
 	lfnode->pos_in_lvl1 = 0;
 	lfnode->block_count = entry->block_nr;
-	kernel_debug("### LMFS type is %d\n", entry->type);
+	lmfs_debug("### LMFS type is %d\n", entry->type);
 	if (entry->type == DT_BLK ) {
-		kernel_debug("file is a file\n");
+		lmfs_debug("file is a file\n");
 		/* this is not a dir */
 		lfnode->bitmap = NULL;
 		lfnode->lvl0 = lfnode->data_block;
 	} else {
-		kernel_debug("file is a dir\n");
+		lmfs_debug("file is a dir\n");
 		/* this is a directory blokc_data[0-31] is for bitmap */
 		lfnode->bitmap = lfnode->data_block;
 		lfnode->lvl0 = &lfnode->data_block[32];
 	}
 
-	kernel_debug("lfnode->data_block[0] 0x%x\n", lfnode->lvl0[0]);
+	lmfs_debug("lfnode->data_block[0] 0x%x\n", lfnode->lvl0[0]);
 	ret = lmfs_read_block(sb,
 			(char *)lfnode->lvl1,
 			lfnode->lvl0[0]);
@@ -318,7 +318,7 @@ static int lmfs_fill_fnode(struct fnode *fnode, u32 fnode_index)
 	if (i == 0 && j == 0)
 		return -EINVAL;
 
-	kernel_debug("LMFS_fill fnode fnode:%d i:%d j:%d\n", fnode_index, i, j);
+	lmfs_debug("LMFS_fill fnode fnode:%d i:%d j:%d\n", fnode_index, i, j);
 	ret = lmfs_read_block(sb, (void *)fnode_entry, i);
 	if (ret)
 		return ret;
@@ -334,7 +334,7 @@ static int lmfs_fill_fnode(struct fnode *fnode, u32 fnode_index)
 	fnode->fnode_size = 512;
 	fnode->sb = sb;
 	fnode->state = 0;
-	kernel_debug("file size is %d\n", fnode_entry->size);
+	lmfs_debug("file size is %d\n", fnode_entry->size);
 	fnode->data_size = fnode_entry->size;
 	fnode->buffer_size = 4096;
 	fnode->psize = sizeof(struct lmfs_fnode);
@@ -483,7 +483,7 @@ static u32 lmfs_get_data_block(struct fnode *fnode, int whence)
 	switch (whence) {
 	case VFS_START_BLOCK:
 		if (pos == 0 && pos_db == 0) {
-			printk("already in the start block\n");
+			lmfs_debug("already in the start block\n");
 			break;
 		}
 
@@ -540,7 +540,7 @@ static u32 lmfs_get_data_block(struct fnode *fnode, int whence)
 		return 0;
 	}
 
-	printk("get data block %d %d\n", whence, lfnode->current_block);
+	lmfs_debug("get data block %d %d\n", whence, lfnode->current_block);
 	return lfnode->current_block;
 }
 
@@ -597,7 +597,7 @@ int lmfs_find_file(char *name, struct fnode *fnode, char *buffer)
 
 	dir_entry = (struct lmfs_dir_entry *)buffer;
 	for (j = 0; j < 16; j++) {
-		printk("%s %s\n", name, dir_entry->name);
+		lmfs_debug("%s %s\n", name, dir_entry->name);
 		if (!strcmp(name, dir_entry->name)) {
 			file_find = 1;
 			break;
@@ -648,7 +648,6 @@ size_t lmfs_getdents(struct fnode *fnode, struct dirent *dent, char *data)
 	struct lmfs_dir_entry *entry = (struct lmfs_dir_entry *)data;
 	int npos = fnode->rw_pos;
 
-	kernel_debug("-------\n");
 	while (npos < fnode->buffer_size) {
 		npos += sizeof(struct lmfs_dir_entry);
 		if (entry->name[0] == 0) {
@@ -659,7 +658,7 @@ size_t lmfs_getdents(struct fnode *fnode, struct dirent *dent, char *data)
 		dent->d_type = entry->type;
 		strcpy(dent->name, entry->name);
 		
-		kernel_debug("npos:%d %s\n", npos, entry->name);
+		lmfs_debug("npos:%d %s\n", npos, entry->name);
 		break;
 	}
 
