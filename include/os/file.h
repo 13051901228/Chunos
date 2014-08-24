@@ -62,6 +62,13 @@ enum {
 
 #define FILE_OPENS	64
 
+#ifdef DEBUG_FS
+#define fs_debug(fmt, ...) kernel_debug(fmt, ##__VA_ARGS__)
+#else
+#define fs_debug(fmt, ...)
+#endif
+
+
 struct file;
 
 struct file_operations {
@@ -105,5 +112,6 @@ int _sys_write(int fd, char *buffer, size_t size);
 int _sys_read(int fd, char *buffer, size_t size);
 int _sys_seek(int fd, offset_t offset, int whence);
 int _sys_ioctl(int fd, u32 cmd, void *arg);
+int _sys_access(char *name, int flag);
 
 #endif
