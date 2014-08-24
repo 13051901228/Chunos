@@ -67,10 +67,12 @@ int main(void)
 		(*fn)();
 		fn++;
 	}
+
+	build_idle_task();
+
 	/* mount root filesystem */
 	mount_init();
 
-	build_idle_task();
 	/* now we can enable irq */
 	enable_irqs();
 	kthread_run("system_killer", system_killer, NULL);
