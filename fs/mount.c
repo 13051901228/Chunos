@@ -4,6 +4,7 @@
 #include <os/disk.h>
 #include <os/filesystem.h>
 #include <os/fnode.h>
+#include <sys/sys_mount.h>
 
 struct mount_tree {
 	struct mount_point *root;
@@ -61,11 +62,16 @@ int do_mount(struct bdev *bdev, char *path, struct filesystem *fs, unsigned long
 	unsigned long flags;
 	struct mount_point *tmp;
 
+	/*
+	 * if mount root filesystem, it is not need to check
+	 * whether the given dir is exist or not, and check
+	 * wether this process can open this file
+	 */
 	if (!strcmp(path, "/")) {
 		kernel_info("mount root filesystem\n");
 	} else {
-	//	 if (access(path, FLAG_DIR))
-	//		return -ENOENT;
+		if (_sys_access(path, O_DIRECTORY))
+			return -ENOENT;
 	}
 
 	mount = alloc_fs_mount(path);
@@ -109,6 +115,21 @@ static struct bdev *get_bdev_by_name(char *name)
 	u8 disk_minor;
 	u8 disk_major;
 
+#if 0
+	struct fnode *fnode;
+	dev_t dev;
+
+	fnode = get_file_fnode(name, O_RDONLY);
+	if (!fnode) {
+		kernel_warning("can not find file %s\n", name);
+		return NULL;
+	}
+
+	dev = fnode->dev;
+	release_fnode(fnode);
+
+	return disk_get_bdev(MAJOR(dev), MINOR(dev));
+#endif
 	if (strncmp(name, "/dev/disk", 9))
 		return NULL;
 	if (name[10] != 'p')
@@ -122,17 +143,24 @@ static struct bdev *get_bdev_by_name(char *name)
 	return disk_get_bdev(disk_major, disk_minor);
 }
 
-int sys_mount(char *dev_path, char *path, char *fs, unsigned long flag)
+int sys_mount(char *dev_path, char *path, char *fs,
+		unsigned long flag, void *data)
 {
-	struct bdev *bdev;
+	struct bdev *bdev = NULL;
 	struct filesystem *filesystem;
 
 	if ((!dev_path) || (!path))
 		return -EINVAL;
 
-	bdev = get_bdev_by_name(dev_path);
-	if (!bdev)
-		return -ENODEV;
+	/*
+	 * Do not interpret character or block special
+	 * devices on the file system.
+	 */
+	if (!(flag & MS_NODEV)) {
+		bdev = get_bdev_by_name(dev_path);
+		if (!bdev)
+			return -ENODEV;
+	}
 
 	filesystem = lookup_filesystem(fs);
 	if (!filesystem)
@@ -151,6 +179,7 @@ struct mount_point *get_mount_point(char *file_name)
 
 	while (tmp) {
 		len = strlen(tmp->path);
+		printk("tmp_path %s file_name %s\n", tmp->path, file_name);
 		/* if new length of mount point big than old */
 		if (len > len_old) {
 			if (len <= file_len) {
@@ -180,7 +209,7 @@ char *get_file_fs_name(struct mount_point *mnt, char *file_name)
 
 int mount_root(char *dev_path, char *path, char *fs, int flag)
 {
-	return (sys_mount(dev_path, path, fs, flag));
+	return (sys_mount(dev_path, path, fs, flag, NULL));
 }
 
 void __init_text mount_init(void)
@@ -188,9 +217,7 @@ void __init_text mount_init(void)
 	/* init system mount tree */
 	memset((void *)&mount_tree, 0, sizeof(struct mount_tree));
 	init_mutex(&mount_tree.mount_mutex);
-	if (!mount_root("/dev/disk0p0", "/", "lmfs", 0)) {
-		kernel_info("mount root filesystem sucessed\n");
-	}
-	//root_dir = dir_open("/");
-	//current->cur_dir = root_dir;
+
+	mount_root("/dev/disk0p0", "/", "lmfs", 0);
+	sys_mount("devfs", "/dev", "devfs", MS_NODEV, NULL);
 }
