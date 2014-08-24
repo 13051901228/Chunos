@@ -29,17 +29,6 @@ static void release_file(struct file *file)
 	kfree(file);
 }
 
-struct file_desc *alloc_and_init_file_desc(void)
-{
-	struct file_desc *fd;
-
-	fd = kzalloc(sizeof(struct file_desc), GFP_KERNEL);
-	if (!fd)
-		return NULL;
-
-	return fd;
-}
-
 struct file *__sys_open(char *name, int flag)
 {
 	struct file *file;
@@ -202,6 +191,22 @@ int _sys_getdents(int fd, char *buf, int count)
 	return vfs_getdents(file, buf, count);
 }
 
+struct file_desc *alloc_and_init_file_desc(void)
+{
+	struct file_desc *fd;
+
+	fd = kzalloc(sizeof(struct file_desc), GFP_KERNEL);
+	if (!fd)
+		return NULL;
+
+	fd->file_open[0] = __sys_open("/dev/ttyS0", O_RDWR);
+	fd->file_open[1] = fd->file_open[0];
+	fd->file_open[2] = fd->file_open[0];
+	fd->open_nr = 3;
+
+	return fd;
+}
+
 struct file inline *kernel_open(char *name, int flag)
 {
 	return __sys_open(name, flag);
@@ -248,7 +253,7 @@ int _sys_fstat(int fd, struct stat *stat)
 int _sys_stat(char *path, struct stat *stat)
 {
 	struct file *file = NULL;
-	int ret;
+	int ret = 0;
 	struct fnode *fnode;
 
 	file = kernel_open(path, O_RDONLY);
@@ -279,4 +284,20 @@ int _sys_stat(char *path, struct stat *stat)
 	kernel_close(file);
 
 	return ret;
+}
+
+int _sys_access(char *name, int flag)
+{
+	struct fnode *fnode;
+
+	/* check wether this file is exist */
+	fnode = get_file_fnode(name, flag);
+	if (!fnode)
+		return -ENODEV;
+
+	/* check wether the usr has the access, TBC */
+
+	release_fnode(fnode);
+
+	return 0;
 }
