@@ -37,8 +37,8 @@ static size_t tty_write(struct file *file, char *buf, size_t size)
 
 	spin_lock_irqsave(&tty->tty_lock, &flags);
 
-	while (*buf)
-		tty->tty_ops->put_char(tty, buf[i++]);
+	for (i = 0; i < size; i++)
+		tty->tty_ops->put_char(tty, buf[i]);
 
 	spin_unlock_irqstore(&tty->tty_lock, &flags);
 
@@ -147,7 +147,6 @@ int tty_flush_log(char *buf, int size)
 {
 	int i;
 	struct tty *tty;
-	char *tmp;
 	int printed = 0;
 
 	for (i = 0; i < TTY_NR; i++) {
@@ -156,9 +155,8 @@ int tty_flush_log(char *buf, int size)
 
 		if (tty->is_console) {
 			printed = 1;
-			tmp = buf;
-			while (*tmp)
-				tty->tty_ops->put_char(tty, *tmp++);
+			for (i = 0; i < size; i++)
+				tty->tty_ops->put_char(tty, buf[i]);
 		}
 	}
 
