@@ -43,7 +43,6 @@ char *get_iname_buffer(void)
 	spin_lock(&iname_buffer_lock);
 	for (i = 0; i < INAME_NR; i++) {
 		if (!read_bit(iname_buffer, i)) {
-			printk("get i is %d\n", i);
 			set_bit(iname_buffer, i);
 			ret = iname_buffer_base + INAME_SIZE * i;
 			goto out;
@@ -181,13 +180,13 @@ static int copy_fnode(struct fnode *fnode, struct fnode *father)
 	fnode->mode = father->mode;
 	fnode->state = 0;
 	fnode->nlinks = 0;
+	fnode->type = father->type;
 
 	if (father->buffer_size != 0) {
 		if (father->buffer_size < 3 * 512 ) {
 			fnode->data_buffer = kzalloc(father->buffer_size, GFP_KERNEL);
 		} else {
 			page_nr = page_nr(father->buffer_size);
-			kernel_debug("request %d page for fnode\n", page_nr);
 			fnode->data_buffer = get_free_pages(page_nr, GFP_KERNEL);
 		}
 
@@ -222,7 +221,7 @@ static int __get_file_fnode(char *name, struct fnode *fnode, char **r_name, int 
 	 * will used as a father fnode passed to next search
 	 */
 	while (fname = find_file_name(fname, tname)) {
-		kernel_debug("fname is %s tname is %s\n", fname, tname);
+		fs_debug("fname is %s tname is %s\n", fname, tname);
 		block = fs->fops->get_data_block(fnode, VFS_START_BLOCK);
 		if (!block)
 			return -ENOSPC;
@@ -243,7 +242,7 @@ static int __get_file_fnode(char *name, struct fnode *fnode, char **r_name, int 
 			type = DT_DIR;
 		}
 
-		kernel_debug("open file type is %d\n", type);
+		fs_debug("open file type is %d\n", type);
 
 		do {
 			err = fs->fops->read_block(sb, buffer, block);
@@ -251,7 +250,7 @@ static int __get_file_fnode(char *name, struct fnode *fnode, char **r_name, int 
 				return -EIO;
 
 			if (!fs->fops->find_file(tname, fnode, buffer)) {
-				kernel_debug("fnode->type:%x type:%x\n", fnode->type, type);
+				fs_debug("fnode->type:%x type:%x\n", fnode->type, type);
 				if ((fnode->type & type) != fnode->type)
 					err = -ENOTDIR;
 
@@ -262,7 +261,7 @@ static int __get_file_fnode(char *name, struct fnode *fnode, char **r_name, int 
 			block = fs->fops->get_data_block(fnode, VFS_NEXT_BLOCK);
 		} while (block);
 
-		kernel_debug("err:0x%x file_find:%d\n", err, file_find);
+		fs_debug("err:0x%x file_find:%d\n", err, file_find);
 
 		if (err)
 			break;
@@ -341,6 +340,7 @@ struct fnode *get_file_fnode(char *file_name, int flag)
 		kernel_debug("find mount point %s real_name %s\n",
 				mnt->path, real_name);
 		root_fnode = mnt->sb->root_fnode;
+		printk("root froot sb is 0x%x\n", (u32)root_fnode->sb);
 	}
 	else {
 		real_name = file_name;
