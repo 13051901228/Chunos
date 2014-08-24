@@ -11,7 +11,9 @@ void arch_dump_register(unsigned long sp)
 		return;
 
 	regs = (pt_regs *)sp;
-	printk("current process %s\n", current->name);
+	if (current)
+		printk("current process %s\n", current->name);
+
 	printk("register value:\n");
 	printk("	r0:0x%x  r1:0x%x  r2:0x%x r3:0x%x\n",
 			regs->r0, regs->r1, regs->r2, regs->r3);
