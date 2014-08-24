@@ -53,30 +53,31 @@ static int devfs_create_entry(struct devfs_node *p,
 			struct devfs_node *dnode, int dir)
 {
 	unsigned long flags;
+	struct devfs_node *d = p;
 
-	if (p == NULL)
-		p = &root;
+	if (d == NULL)
+		d = &root;
 
-	if (dir) {
-		if (p->type != DT_DIR)
+	if (d) {
+		if (d->type != DT_DIR)
 			return -EINVAL;
 	}
 
 	lock_kernel_irqsave(&flags);
-	list_add_tail(&p->child, &dnode->list);
-	p->nr_child++;
+	list_add_tail(&d->child, &dnode->list);
+	d->nr_child++;
 	unlock_kernel_irqstore(&flags);
 
 	return 0;
 }
 
-int devfs_create_file(struct devfs_node *p,
+int inline devfs_create_file(struct devfs_node *p,
 		struct devfs_node *dnode)
 {
 	return devfs_create_entry(p, dnode, 0);
 }
 
-int devfs_create_dir(struct devfs_node *p, struct devfs_node *dnode)
+int inline devfs_create_dir(struct devfs_node *p, struct devfs_node *dnode)
 {
 	return devfs_create_entry(p, dnode, 1);
 }
@@ -89,21 +90,23 @@ static int devfs_fill_fnode(struct fnode *fnode, struct devfs_node *dnode)
 	fnode->ctime = 0;
 	fnode->blk_cnt = 1;
 	fnode->blk_size = sizeof(struct devfs_node);
+	fnode->type = dnode->type;
 	
-	memcpy(fnode->private_data, dnode, sizeof(struct devfs_node));
+	memcpy(fnode->private_data, (char *)&dnode,
+			sizeof(struct devfs_node *));
 	
 	return 0;
 }
 
 static int devfs_find_file(char *name, struct fnode *fnode, char *buffer)
 {
-	struct list_head *list = (struct list_head *)buffer;
+	u32 t = *((u32 *)buffer);
+	struct list_head *list = (struct list_head *)t;
 	struct devfs_node *tmp;
 
 	tmp = list_entry(list, struct devfs_node, list);
-	if (!strncmp(name, tmp->name, strlen(name))) {
+	if (!strncmp(name, tmp->name, strlen(name)))
 		return devfs_fill_fnode(fnode, tmp);
-	}
 
 	return -ENOENT;
 }
@@ -111,6 +114,7 @@ static int devfs_find_file(char *name, struct fnode *fnode, char *buffer)
 static struct fnode *devfs_get_root_fnode(struct super_block *sb)
 {
 	struct fnode *fnode;
+	struct devfs_node *root_addr = &root;
 
 	fnode = allocate_fnode(sizeof(struct devfs_node));
 	if (!fnode)
@@ -118,30 +122,44 @@ static struct fnode *devfs_get_root_fnode(struct super_block *sb)
 
 	fnode->fnode_size = sizeof(struct devfs_node);
 	fnode->sb = sb;
-	fnode->psize = sizeof(struct devfs_node);
-	fnode->buffer_size = sizeof(struct list_head);
+	fnode->psize = sizeof(struct devfs_node *);
+	fnode->buffer_size = sizeof(struct list_head *);
+	fnode->type = DT_DIR;
 
 	/* copy root devfs_node */
-	memcpy(fnode->private_data, &root, sizeof(struct devfs_node));
+	memcpy(fnode->private_data, (char *)&root_addr,
+			sizeof(struct devfs_node *));
+
+	return fnode;
 }
 
 static u32 devfs_get_data_block(struct fnode *fnode, int whence)
 {
-	struct devfs_node *dnode = fnode->private_data;
-	struct list_head *list = (struct list_head *)fnode->data_buffer;
+	u32 addr = *((u32 *)fnode->private_data);
+	struct devfs_node *dnode = (struct devfs_node *)addr;
+	struct list_head *list = dnode->current_child;
 
 	switch (whence) {
 	case VFS_START_BLOCK:
-		list = list_next(&dnode->child);
+		if (fnode->type == DT_DIR)
+			list = list_next(&dnode->child);
+		else
+			return (&dnode->list);
 		break;
 
 	case VFS_NEXT_BLOCK:
-		list = list_next(list);
+		if (fnode->type == DT_DIR)
+			list = list_next(list);
+		else
+			return 0;
 		break;
 	}
 
-	if (list == list_next(list))
+	if (list == &dnode->child) {
 		return 0;
+	}
+
+	dnode->current_child = list;
 
 	return (u32)list;
 }
@@ -149,7 +167,7 @@ static u32 devfs_get_data_block(struct fnode *fnode, int whence)
 static int devfs_copy_fnode(struct fnode *fnode, struct fnode *parent)
 {
 	memcpy(fnode->private_data, parent->private_data,
-			sizeof(struct devfs_node));
+			sizeof(struct devfs_node *));
 
 	return 0;
 }
@@ -189,6 +207,7 @@ static int devfs_write_sb(struct super_block *sb)
 static int devfs_read_block(struct super_block *sb,
 		char *buffer, block_t block)
 {
+	memcpy(buffer, (char *)&block, sizeof(struct list_head *));
 	return 0;
 }
 
@@ -225,7 +244,7 @@ static int devfs_init(void)
 	root.nr_child = 0;
 	root.dev = 0;
 	root.type = DT_DIR;
-	memset(root.name, 0, 31);
+	strcpy(root.name, "devfs");
 
 	return register_filesystem(&devfs);
 }
