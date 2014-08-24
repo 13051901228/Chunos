@@ -79,9 +79,14 @@ static int init_task_struct(struct task_struct *task, u32 flag)
 	init_list(&task->child);
 	init_mutex(&task->mutex);
 
-	task->file_desc = alloc_and_init_file_desc();
-	if (!task->file_desc)
-		return -ENOMEM;
+	/*
+	 * if process is a userspace process, init the file desc
+	 */
+	if (flag & PROCESS_TYPE_USER) {
+		task->file_desc = alloc_and_init_file_desc();
+		if (!task->file_desc)
+			return -ENOMEM;
+	}
 
 	enter_critical(&flags);
 	list_add(&parent->child, &task->p);
@@ -464,6 +469,7 @@ static int alloc_memory_and_map(struct task_struct *task)
 		if (addr == NULL)
 			goto out;
 
+		printk("allocate stack 0x%x\n", addr);
 		task_map_memory(addr, task, PROCESS_MAP_STACK);
 		page = va_to_page((unsigned long)addr);
 		list_add_tail(&ms->elf_stack_list, &page->plist);
@@ -705,7 +711,8 @@ static int setup_task_argv_envp(struct task_struct *task,
 	list = list_next(list);
 	slist = list_next(slist);
 	load_base = page_to_va(list_entry(list, struct page, plist));
-	table_base = (u32 *)page_to_va(list_entry(slist, struct page, plist));
+	/* adjust the stack base, arm is up to down */
+	table_base = (u32 *)(page_to_va(list_entry(slist, struct page, plist)) + PAGE_SIZE);
 	table_base = table_base - (argv_sum + env_sum + 1);
 
 	*table_base = argv_sum;
@@ -1013,7 +1020,7 @@ int do_exec(char __user *name,
 	struct file *file;
 	int err = 0;
 	struct elf_file *elf = NULL;
-	int ae_size;
+	int ae_size = 0;
 
 	if (current->flag & PROCESS_TYPE_KERNEL) {
 		/*
