@@ -56,9 +56,9 @@ enum {
 #define F_SETLK		6
 #define F_SETLKW	7
 
-#define SEEK_SET	1
-#define SEEK_CUR	2
-#define SEEK_END	4
+#define SEEK_SET	0
+#define SEEK_CUR	1
+#define SEEK_END	2
 
 #define FILE_OPENS	64
 
@@ -79,6 +79,7 @@ struct file_operations {
 	int (*open)(struct file *file, int flag);
 	int (*close)(struct file *file);
 	int (*mmap)(struct file *file, char *buffer, size_t size, offset_t offset);
+	size_t (*msync)(struct file *file, char *buffer, size_t size, offset_t offset);
 	int (*stat)(struct file *file, struct stat *stat);
 };
 
@@ -113,5 +114,7 @@ int _sys_read(int fd, char *buffer, size_t size);
 int _sys_seek(int fd, offset_t offset, int whence);
 int _sys_ioctl(int fd, u32 cmd, void *arg);
 int _sys_access(char *name, int flag);
+size_t fmsync(int fd, char *buffer, size_t size, offset_t off);
+size_t fmmap(int fd, char *buffer, size_t size, offset_t offset);
 
 #endif

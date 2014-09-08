@@ -41,6 +41,7 @@ struct filesystem_ops {
 			  struct super_block *sb);
 	int (*write_superblock)(struct super_block *sb);
 	int (*write_fnode)(struct fnode *fnode);
+	int (*release_fnode)(struct fnode *fnode);
 };
 
 #define FILE_SYSTEM_NAME_SIZE		32

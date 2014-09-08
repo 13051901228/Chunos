@@ -255,7 +255,6 @@ static int vfs_seek(struct file *file, offset_t offset, int whence)
 	size_t buffer_size = fnode->buffer_size;
 
 	/* 1 is front 0 is back will define malloc for them later */
-	vfs_debug("-----seek offset:%x whence%x-----\n", offset, whence);
 	switch (whence) {
 	case SEEK_SET:
 		if (offset > fnode->data_size)
@@ -281,6 +280,7 @@ static int vfs_seek(struct file *file, offset_t offset, int whence)
 	case SEEK_END:
 		new_off = fnode->data_size - file->offset;
 		direction = 0;
+		new = fnode->data_size;
 		break;
 	default:
 		break;
@@ -358,17 +358,17 @@ static int vfs_seek(struct file *file, offset_t offset, int whence)
 	fnode->rw_pos %= buffer_size;
 
 	file->offset = new;
-	vfs_debug("-----file_offset:%x fnode_offset:%x-----\n",
+	vfs_debug("file_offset:%x fnode_offset:%x\n",
 			file->offset, fnode->rw_pos);
-	return err;
+	return file->offset;
 }
 
-static int vfs_mmap(struct file *file, char *buffer,
+static size_t vfs_mmap(struct file *file, char *buffer,
 		size_t size, offset_t offset)
 {
 	int err;
 
-	if (file->offset != offset) {
+	if ((file->offset != offset)) {
 		err = vfs_seek(file, offset, SEEK_SET);
 		if (err)
 			return err;
@@ -377,7 +377,20 @@ static int vfs_mmap(struct file *file, char *buffer,
 	return vfs_read(file, buffer, size);
 }
 
-//static int vfs_munmap()
+static size_t vfs_msync(struct file *file, char *buffer,
+			size_t size, offset_t offset)
+{
+	int err;
+
+	/* TBC */
+	if (file->offset != offset) {
+		err = vfs_seek(file, offset, SEEK_SET);
+		if (err)
+			return err;
+	}
+
+	return vfs_write(file, buffer, size);
+}
 
 static int vfs_ioctl(struct file *file, u32 cmd, void *arg)
 {
@@ -387,7 +400,15 @@ static int vfs_ioctl(struct file *file, u32 cmd, void *arg)
 
 static int vfs_close(struct file *file)
 {
+	struct filesystem *fs = fnode_get_filesystem(file->fnode);
+
+	if (fs->fops->release_fnode)
+		fs->fops->release_fnode(file->fnode);
+
 	/* TO BE IMPLEMENT */
+	release_fnode(file->fnode);
+	kfree(file);
+
 	return 0;
 }
 
@@ -470,6 +491,7 @@ struct file_operations vfs_ops = {
 	.write	= vfs_write,
 	.ioctl	= vfs_ioctl,
 	.mmap	= vfs_mmap,
+	.msync	= vfs_msync,
 	.seek	= vfs_seek,
 	.close	= vfs_close,
 	.stat	= vfs_stat,
