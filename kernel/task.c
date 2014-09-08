@@ -701,7 +701,7 @@ int switch_task(struct task_struct *cur,
 }
 
 static int setup_task_argv_envp(struct task_struct *task,
-			    char **argv, char **envp)
+		char *name, char **argv, char **envp)
 {
 	char *argv_base = (char *)(PROCESS_USER_BASE);
 	int i, length;
@@ -709,7 +709,7 @@ static int setup_task_argv_envp(struct task_struct *task,
 	struct list_head *slist = &task->mm_struct.elf_stack_list;
 	unsigned long load_base;
 	u32 *table_base;
-	int argv_sum = 0;
+	int argv_sum = 1;
 	int env_sum = 0;
 
 	if (task->flag & PROCESS_TYPE_KERNEL)
@@ -745,6 +745,17 @@ static int setup_task_argv_envp(struct task_struct *task,
 	*table_base = argv_sum;
 	table_base++;
 
+	/* copy name */
+	length = strlen(name);
+	strcpy((char *)load_base, name);
+	*table_base = (unsigned long)argv_base;
+	argv_base += length;	/* argv[i] address in userspace */
+	load_base += length;
+	table_base++;
+	argv_base = (char *)baligin((u32)argv_base, 4);
+	load_base = baligin(load_base, 4);
+
+	/* copy argv */
 	for (i = 0; i < argv_sum; i++) {
 		length = strlen(argv[i]);
 		strcpy((char *)load_base, argv[i]);
@@ -756,6 +767,7 @@ static int setup_task_argv_envp(struct task_struct *task,
 		load_base = baligin(load_base, 4);
 	}
 
+	/* copy envp */
 	for (i = 0; i < env_sum; i++) {
 		length = strlen(envp[i]);
 		strcpy((char *)load_base, argv[i]);
@@ -894,7 +906,7 @@ int load_elf_section(struct elf_section *section,
 	 * so we can calculate the location of the section
 	 * in the memeory
 	 */
-	if ((section->load_addr < 0x00401000) ||
+	if ((section->load_addr < PROCESS_USER_EXEC_BASE) ||
 	    (section->size == 0))
 		return -EINVAL;
 
@@ -1080,6 +1092,10 @@ int do_exec(char __user *name,
 		goto exit;
 	}
 
+	/* must befor load_elf_image, since the memory
+	 * will be overwrited by it */
+	ae_size = setup_task_argv_envp(new, name, argv, envp);
+
 	/*
 	 * load the elf file to memory, the original process
 	 * will be coverd by new process. so if process load
@@ -1095,7 +1111,6 @@ int do_exec(char __user *name,
 	flush_cache();
 
 	/* modify the regs for new process. */
-	ae_size = setup_task_argv_envp(new, argv, envp);
 	init_pt_regs(regs, NULL, (void *)ae_size);
 
 	/*
@@ -1125,7 +1140,7 @@ int kernel_exec(char *filename)
 	pt_regs regs;
 
 	memset((char *)&regs, 0, sizeof(pt_regs));
-	init_argv[0] = filename;
+	init_argv[0] = NULL;
 	init_argv[1] = NULL;
 
 	return do_exec((char __user *)filename,
