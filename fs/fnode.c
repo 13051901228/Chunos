@@ -340,7 +340,6 @@ struct fnode *get_file_fnode(char *file_name, int flag)
 		kernel_debug("find mount point %s real_name %s\n",
 				mnt->path, real_name);
 		root_fnode = mnt->sb->root_fnode;
-		printk("root froot sb is 0x%x\n", (u32)root_fnode->sb);
 	}
 	else {
 		real_name = file_name;

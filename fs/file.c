@@ -104,63 +104,55 @@ int _sys_open(char *name, int flag)
 	return fd;
 }
 
-int _sys_write(int fd, char *buffer, size_t size)
+static inline struct file *fd_to_file(int fd)
 {
 	struct file_desc *fdes = current->file_desc;
 	struct file *file;
 
 	if (fd > FILE_OPENS || !fdes->file_open[fd])
-		return -ENOENT;
-
-	if (size <= 0)
-		return -EINVAL;
+		return NULL;
 
 	file = fdes->file_open[fd];
+
+	return file;
+}
+
+int _sys_write(int fd, char *buffer, size_t size)
+{
+	struct file *file = fd_to_file(fd);
+
+	if (size <= 0 || !file)
+		return -EINVAL;
 
 	return file->fops->write(file, buffer, size);
 }
 
 int _sys_read(int fd, char *buffer, size_t size)
 {
-	struct file_desc *fdes = current->file_desc;
-	struct file *file;
+	struct file *file = fd_to_file(fd);
 
-	if (fd > FILE_OPENS || !fdes->file_open[fd])
-		return -ENOENT;
-
-	if (size <= 0)
+	if (size <= 0 || !file)
 		return -EINVAL;
-
-	file = fdes->file_open[fd];
 
 	return file->fops->read(file, buffer, size);
 }
 
 int _sys_seek(int fd, offset_t offset, int whence)
 {
-	struct file_desc *fdes = current->file_desc;
-	struct file *file;
+	struct file *file = fd_to_file(fd);
 
-	if (fd > FILE_OPENS || !fdes->file_open[fd])
-		return -ENOENT;
-
-	if (offset <= 0)
+	if (offset < 0 || !file)
 		return -EINVAL;
 
-	file = fdes->file_open[fd];
-	
 	return file->fops->seek(file, offset, whence);
 }
 
 int _sys_ioctl(int fd, u32 cmd, void *arg)
 {
-	struct file_desc *fdes = current->file_desc;
-	struct file *file;
+	struct file *file = fd_to_file(fd);
 
-	if (fd > FILE_OPENS || !fdes->file_open[fd])
+	if (!file)
 		return -ENOENT;
-
-	file = fdes->file_open[fd];
 
 	return file->fops->ioctl(file, cmd, arg);
 }
@@ -174,19 +166,19 @@ int _sys_close(int fd)
 		return -ENOENT;
 
 	file = fdes->file_open[fd];
+	file->fops->close(file);
+	fdes->file_open[fd] = NULL;
+	fdes->open_nr--;
 
-	return file->fops->close(file);
+	return 0;
 }
 
 int _sys_getdents(int fd, char *buf, int count)
 {
-	struct file_desc *fdes = current->file_desc;
-	struct file *file;
+	struct file *file = fd_to_file(fd);
 
-	if (fd > FILE_OPENS || !fdes->file_open[fd])
+	if (!file)
 		return -ENOENT;
-
-	file = fdes->file_open[fd];
 
 	return vfs_getdents(file, buf, count);
 }
@@ -239,13 +231,10 @@ int inline kernel_close(struct file *file)
 
 int _sys_fstat(int fd, struct stat *stat)
 {
-	struct file_desc *fdes = current->file_desc;
-	struct file *file;
+	struct file *file = fd_to_file(fd);
 
-	if (fd > FILE_OPENS || !fdes->file_open[fd])
+	if (!file)
 		return -ENOENT;
-
-	file = fdes->file_open[fd];
 
 	return vfs_stat(file, stat);
 }
@@ -300,4 +289,25 @@ int _sys_access(char *name, int flag)
 	release_fnode(fnode);
 
 	return 0;
+}
+
+size_t fmmap(int fd, char *buffer,
+	     size_t size, offset_t off)
+{
+	struct file *file = fd_to_file(fd);
+
+	if (!file)
+		return -ENOENT;
+
+	return file->fops->mmap(file, buffer, size, off);
+}
+
+size_t fmsync(int fd, char *buffer, size_t size, offset_t off)
+{
+	struct file *file = fd_to_file(fd);
+
+	if (!file)
+		return -ENOENT;
+
+	return file->fops->msync(file, buffer, size, off);
 }

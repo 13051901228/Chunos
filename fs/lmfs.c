@@ -665,6 +665,16 @@ size_t lmfs_getdents(struct fnode *fnode, struct dirent *dent, char *data)
 	return (npos - fnode->rw_pos);
 }
 
+static int lmfs_release_fnode(struct fnode *fnode)
+{
+	struct lmfs_fnode *lfnode = fnode->private_data;
+
+	if (lfnode->lvl1)
+		kfree(lfnode->lvl1);
+
+	return 0;
+}
+
 struct filesystem_ops lmfs_ops = {
 	.find_file		= lmfs_find_file,
 	.get_data_block		= lmfs_get_data_block,
@@ -678,6 +688,7 @@ struct filesystem_ops lmfs_ops = {
 	.fill_super		= lmfs_fill_super,
 	.write_superblock	= lmfs_write_sb,
 	.getdents		= lmfs_getdents,
+	.release_fnode		= lmfs_release_fnode,
 };
 
 #define LMFS_FS_FLAG	\
