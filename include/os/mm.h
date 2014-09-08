@@ -100,6 +100,7 @@ struct page {
 	union {
 		u16 free_size;
 		u16 extra_size;
+		u16 mmap_offset;
 	};
 	u8 count;
 	u8 usage;

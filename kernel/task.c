@@ -15,6 +15,7 @@
 #include <os/task.h>
 #include <os/syscall.h>
 #include <os/irq.h>
+#include <os/mmap.h>
 
 #ifdef	DEBUG_PROCESS
 #define debug(fmt, ...)	kernel_debug(fmt, ##__VA_ARGS__)
@@ -47,6 +48,7 @@ static int init_mm_struct(struct task_struct *task, u32 user_sp)
 		init_list(&mm->mmap_mem_list);
 		init_bitmap(mm->mmap, PROCESS_USER_MMAP_SIZE >> PAGE_SHIFT);
 		mm->free_pos = 0;
+		mm->mmap_nr = PROCESS_USER_MMAP_SIZE >> PAGE_SHIFT;
 	}
 	
 	return 0;
@@ -283,7 +285,7 @@ static int bitmap_find_free_base(u32 *map, int start,
 	int sum = 0;
 
 	while (1) {
-		if (read_bit(map, start) == value) {
+		if (read_bit(map, i) == value) {
 			sum++;
 			if (sum == count)
 				return (i + 1 - count);
@@ -308,8 +310,17 @@ static int bitmap_find_free_base(u32 *map, int start,
 	return -ENOSPC;
 }
 
+#define mmap_start(start)	\
+	(start - PROCESS_USER_MMAP_BASE)
+
+#define mmap_pos_x(start)	\
+	(mmap_start(start) / SIZE_NM(4))
+
+#define mmap_pos_y(start)	\
+	((mmap_start(start) % SIZE_NM(4)) >> PAGE_SHIFT)
+
 int mmap(struct task_struct *task, unsigned long start,
-		unsigned long virt, int flags)
+	 unsigned long virt, int flags, int fd, offset_t off)
 {
 	struct mm_struct *ms = &task->mm_struct;
 	int i, j;
@@ -317,9 +328,8 @@ int mmap(struct task_struct *task, unsigned long start,
 	unsigned long *page_table;
 	struct page *page;
 
-	i = (start - PROCESS_USER_MMAP_BASE) / SIZE_NM(4);
-	j = ((start - PROCESS_USER_MMAP_BASE) % SIZE_NM(4)) / PAGE_SIZE;
-	debug("mmap start:0x%x 0x%x i:%d j:%d\n", start, virt, i, j);
+	i = mmap_pos_x(start);
+	j = mmap_pos_y(start);
 
 	do {
 		list = list_next(list);
@@ -334,36 +344,42 @@ int mmap(struct task_struct *task, unsigned long start,
 		return -EAGAIN;
 
 	/* flag to be done */
-	build_page_table_entry(page_table, virt, PAGE_SIZE, 0);
+	build_page_table_entry((unsigned long)page_table, virt, PAGE_SIZE, 0);
 
 	/* after map we need flus the cache and invaild the TLB */
 	flush_mmu_tlb();
 	flush_cache();
 
-	/* update the mmap information */
-	page = va_to_page(start);
+	/* update the mmap information, the mmap fd information
+	 * is stored in the page->free_base
+	 */
+	page = va_to_page(virt);
 	list_add_tail(&ms->mmap_mem_list, &page->plist);
-	page->flag |= flags;
+	page->flag |= __GFP_USER;
+	page->free_base = (virt & 0xfffff000) | (mmap_magic(fd));
+	page->mmap_offset = off;
 
 	return 0;
 }
 
-int munmap(struct task_struct *task, unsigned long start, int pages)
+int munmap(struct task_struct *task, unsigned long start,
+		size_t length, int flags, int sync)
 {
 	struct mm_struct *ms = &task->mm_struct;
 	int bit_start;
-	int i;
-	int j;
+	int i, j;
 	struct list_head *list = &ms->mmap_page_list;
 	unsigned long *page_table;
 	unsigned long buffer;
 	struct page *page;
 	struct page *tmp;
+	int fd = 0xff;
+	int pages = page_nr(length);
+	size_t size;
 
-	bit_start = (start - PROCESS_USER_MMAP_BASE) / PAGE_SIZE;
-	i = (start - PROCESS_USER_MMAP_BASE) / SIZE_NM(4);
-	j = ((start - PROCESS_USER_MMAP_BASE) % SIZE_NM(4)) / PAGE_SIZE;
-	debug("mmap start:0x%x i:%d j:%d\n", start, i, j);
+	bit_start = mmap_start(start) >> PAGE_SHIFT;
+	i = mmap_pos_x(start);
+	j = mmap_pos_y(start);
 	
 	do {
 		list = list_next(list);
@@ -394,40 +410,53 @@ int munmap(struct task_struct *task, unsigned long start, int pages)
 		/* get the va of the mem */
 		buffer = *page_table & 0xfffff000;
 		buffer = pa_to_va(buffer);
-		debug("umap memory is 0x%x\n", buffer);
-
 		tmp = va_to_page(buffer);
-		list_del(&tmp->plist);
 
-		if (read_bit(ms->mmap, bit_start + i))
-			clear_bit(ms->mmap, bit_start + i);
+		/* sync is 1: do msync else do munmap */
+		if (sync) {
+			fd = mmap_addr2fd(tmp->free_base);
+			if (fd != 0xff) {
+				size = length > PAGE_SIZE ? PAGE_SIZE : length;
+				if (fmsync(fd, (char *)buffer, size, tmp->mmap_offset) != size) {
+					kernel_warning("fmsync failed fd:%d offset:0x%x\n",
+							fd, tmp->mmap_offset);
+				}
+				length -= size;
+			}
+		} else {
+			list_del(&tmp->plist);
+			if (read_bit(ms->mmap, bit_start + i))
+				clear_bit(ms->mmap, bit_start + i);
 
-#define PAGE_MMAP_FLAG_MASK	0x0
-		tmp->flag &= ~(PAGE_MMAP_FLAG_MASK);
-		kfree((void *)buffer);
-		*page_table = 0;
+			kfree((void *)buffer);
+			*page_table = 0;
+		}
 
 		page_table++;
 	}
 
-	flush_mmu_tlb();
-	flush_cache();
+	/* if is munmap flush the cache */
+	if (!sync) {
+		flush_mmu_tlb();
+		flush_cache();
+	}
 
 	return 0;
 }
 
-void *get_task_user_mm_free_base(struct task_struct *task, int page_nr)
+unsigned long get_mmap_user_base(struct task_struct *task, int page_nr)
 {
 	struct mm_struct *ms = &task->mm_struct;
 	unsigned long start;
 	int i, j, k;
-	int nr = PROCESS_USER_MMAP_SIZE >> PAGE_SHIFT;
 
 	/* find continous pages to map, shall we add a spin_lock ?*/
-	i = bitmap_find_free_base(ms->mmap, ms->free_pos, 0, nr, page_nr);
+	kernel_debug("ms->free_pos is %d\n", ms->free_pos);
+	i = bitmap_find_free_base(ms->mmap, ms->free_pos,
+			0, ms->mmap_nr, page_nr);
 	if (i < 0) {
 		kernel_error("no free user space for mmap\n");
-		return NULL;
+		return 0;
 	}
 
 	/* calculate the free base of the user space
@@ -436,16 +465,15 @@ void *get_task_user_mm_free_base(struct task_struct *task, int page_nr)
 	k = i % 1024;
 
 	start = PROCESS_USER_MMAP_BASE + (j * SIZE_NM(4)) + (k * PAGE_SIZE);
-	debug("find user mm: start:%x j:%d k:%d\n", start, j, k);
 
 	/* mask the memory will be used */
 	for (j = 0; j < page_nr; j++) {
 		set_bit(ms->mmap, i);
 		i++;
 	}
-	ms->free_pos = i;
+	ms->free_pos = (i >= ms->mmap_nr ? 0 : i);
 
-	return (void *)start;
+	return start;
 }
 
 static int alloc_memory_and_map(struct task_struct *task)
@@ -469,7 +497,6 @@ static int alloc_memory_and_map(struct task_struct *task)
 		if (addr == NULL)
 			goto out;
 
-		printk("allocate stack 0x%x\n", addr);
 		task_map_memory(addr, task, PROCESS_MAP_STACK);
 		page = va_to_page((unsigned long)addr);
 		list_add_tail(&ms->elf_stack_list, &page->plist);
@@ -1069,7 +1096,7 @@ int do_exec(char __user *name,
 
 	/* modify the regs for new process. */
 	ae_size = setup_task_argv_envp(new, argv, envp);
-	init_pt_regs(regs, NULL, ae_size);
+	init_pt_regs(regs, NULL, (void *)ae_size);
 
 	/*
 	 * fix me - whether need to do this if exec
