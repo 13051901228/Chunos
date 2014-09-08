@@ -63,7 +63,6 @@ void put_iname_buffer(char *buf)
 
 	i = (buf - iname_buffer_base) / INAME_SIZE;
 
-	printk("put i is %d\n", i);
 	spin_lock(&iname_buffer_lock);
 	if (!read_bit(iname_buffer, i)) {
 		kernel_error("iname buffer already released\n");
