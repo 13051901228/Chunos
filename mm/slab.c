@@ -374,7 +374,6 @@ void *kzalloc(int size,unsigned long flag)
 
 static void free_slice_slab(void *addr)
 {
-	int usage = 0;
 	struct page *pg;
 	struct slab_header *header;
 
@@ -423,6 +422,7 @@ void kfree(void *addr)
 	if (!addr)
 		return;
 
+	mm_debug("kfree free address is 0x%x\n", (u32)addr);
 	mutex_lock(&pslab->slab_mutex);
 
 	pg = va_to_page((unsigned long)addr);

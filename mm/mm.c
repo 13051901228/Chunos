@@ -398,15 +398,21 @@ static int init_page_table(void)
 	struct soc_memory_info *info = get_soc_memory_info();
 	address_t kernel_end = info->code_end;
 
+	/* page table start addr */
 	_page_table = (struct page *)(baligin(kernel_end, sizeof(int)));
 	tmp = (unsigned long)(_page_table + bank->total_page);
-	_page_map = (u32 *)(baligin(tmp, sizeof(u32)));
-	tmp = (unsigned long)(_page_map + bits_to_long(bank->total_page));
 
+	/* bitmap start addr */
+	_page_map = (u32 *)(baligin(tmp, sizeof(u32)));
+
+	/* how much memory is aready used then need
+	 * to set it bit in bitmap to 0
+	 */
+	tmp = (unsigned long)(_page_map + bits_to_long(bank->total_page));
 	memset((char *)_page_map, 0, tmp - (unsigned long)_page_map);
 
 	size = tmp - info->kernel_virtual_start;
-	size = baligin(size,PAGE_SIZE);
+	size = baligin(size, PAGE_SIZE);
 	zone->free_size = zone->free_size - size;
 	size = size >> PAGE_SHIFT;
 	zone->free_pages = zone->free_pages -size;
@@ -420,7 +426,7 @@ static int init_page_table(void)
 
 	tmp = info->kernel_virtual_start;
 	for (i = 0; i < size; i++) {
-		set_bit(_page_map,i);
+		set_bit(_page_map, i);
 		page = &_page_table[i];
 
 		/* init page struct */
@@ -428,14 +434,15 @@ static int init_page_table(void)
 		init_list(&page->plist);
 		page->free_size = 0;
 		page->free_base = 0;
-		page->count = 0;
+		page->count = 1;
 		page->usage = 1;
+		page->flag = __GFP_KERNEL;
 
 		tmp += PAGE_SIZE;
 	}
 
 	/* code to init bm_current bm_start bm_end */
-	zone->bm_start = 0;
+	zone->bm_start = size;
 	zone->bm_current = size;
 	i = zone->bm_end = zone->page_num;
 
@@ -461,10 +468,10 @@ static void dump_memory_info(void)
 	int i;
 	char *zone_str[MM_ZONE_UNKNOW] = {"normal", "dma", "res", "io"};
 
-	mm_info("zone   size   free_size  bm_start  bm_current bm_end\n");
+	kernel_info("zone   size   free_size  bm_start  bm_current bm_end\n");
 	for (i = 0; i < MM_ZONE_UNKNOW; i++) {
 		zone = &bank->zone[i];
-		mm_info("%s  0x%x  0x%x  %d  %d  %d\n",
+		kernel_info("%s  0x%x  0x%x  %d  %d  %d\n",
 			zone_str[i], zone->total_size,
 			zone->free_size, zone->bm_start,
 			zone->bm_current,zone->bm_end);	
@@ -670,16 +677,16 @@ static u32 find_continous_pages(struct mm_zone *zone, int count)
 		if (!read_bit(page_map, i)) {
 			sum++;
 			if (sum == count)
-				return i - count + 1;
+				return (i - count + 1);
 		}
 		else
 			sum = 0;
 
-		if (i == zone->bm_end) {
+		if (i == (zone->bm_end - 1)) {
 			again = 1;
 			sum = 0;
 			/* fix me needed to be checked */
-			i = zone->bm_start - 1;
+			i = zone->bm_start;
 		}
 
 		if (again) {
@@ -737,7 +744,10 @@ static void *_get_free_pages(int count, u32 flag)
 
 	/* update the zone information */
 	zone->bm_current = index + count;
-	zone->free_size = zone->free_size - (count >> PAGE_SHIFT);
+	if (zone->bm_current >= zone->bm_end)
+		zone->bm_current = zone->bm_start;
+
+	zone->free_size = zone->free_size - (count << PAGE_SHIFT);
 	zone->free_pages = zone->free_pages - count;
 
 	mutex_unlock(&zone->zone_mutex);
@@ -770,9 +780,9 @@ void update_bm_current(struct mm_zone *zone)
 		start--;
 	}
 
-	mm_debug("update bm_current count is current end %d %d\n", count, zone->bm_current);
-
 	zone->bm_current -= count;
+	mm_debug("update bm_current count:%d current %d\n",
+			count, zone->bm_current);
 }
 
 static void __free_pages(struct page *pg, struct mm_zone *zone)
