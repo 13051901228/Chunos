@@ -30,4 +30,13 @@
 #define MADV_WILLNEED	0x3		/* pre-fault pages */
 #define MADV_DONTNEED	0x4		/* discard these pages */
 
+#define mmap_tag(fd)		((fd << 8) | MMAP_MAGIC)
+#define mmap_magic(fd)		(fd & 0x00000fff)
+#define mmap_addr2fd(addr)	((addr & 0x00000fff))
+
+int os_munmap(void *addr, size_t length);
+int os_msync(void *addr, size_t length, int flags);
+void *os_mmap(void *start, size_t length, int prot,
+		int flags, int fd, offset_t offset);
+
 #endif

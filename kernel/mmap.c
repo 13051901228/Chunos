@@ -12,7 +12,6 @@ void *os_mmap(void *start, size_t length, int prot,
 	unsigned long tmp;
 	int pages = 0;
 	char *buffer;
-	struct file *file = NULL;
 	int i;
 	offset_t off = offset;
 	size_t size;
@@ -23,14 +22,8 @@ void *os_mmap(void *start, size_t length, int prot,
 	if (!length)
 		return NULL;
 	
-	/* should be > 3? */
-	if (fd >= 0) {
-		file = task->file_desc->file_open[fd];
-		if (!file) {
-			kernel_error("file %d is not open\n", fd);
-			return NULL;
-		}
-	}
+	if (fd < 0)
+		fd = 0xff;
 
 	pages = page_nr(length);
 
@@ -43,7 +36,7 @@ void *os_mmap(void *start, size_t length, int prot,
 		/* check wether this addr is vaild now, TBD */
 	} else {
 		/* get the current vaild user space's address to map */
-		__start = (unsigned long)get_task_user_mm_free_base(task, pages);
+		__start = get_mmap_user_base(task, pages);
 		if (!__start) {
 			kernel_error("No more user memeory space for mmap\n");
 			return NULL;
@@ -57,17 +50,14 @@ void *os_mmap(void *start, size_t length, int prot,
 		if (!buffer)
 			goto out;
 
-		if (mmap(task, tmp, (unsigned long)buffer, flags)) {
-			kfree(buffer);
+		if (mmap(task, tmp, (unsigned long)buffer, flags, fd, off))
 			goto out;
-		}
 
 		/* if the fd is required and opened , we read the data */
-		if (file) {
+		if (fd != 0xff) {
 			size = length > PAGE_SIZE ? PAGE_SIZE : length;
-			if (!file->fops->mmap(file, buffer, size, off))
+			if (fmmap(fd, buffer, size, off) != size)
 				goto out;
-
 			length -= size;
 			off += size;
 		}
@@ -79,15 +69,28 @@ void *os_mmap(void *start, size_t length, int prot,
 
 out:
 	/* release the buffer which is arealdy maped */
-	munmap(task, __start, pages);
+	os_munmap((void *)__start, tmp - __start);
 	return NULL;
+}
+
+static int __os_munmap(unsigned long addr, size_t length,
+		int flags, int sync)
+{
+	if (!addr)
+		return -EINVAL;
+
+	if (!is_aligin(addr, PAGE_SIZE))
+		return -EINVAL;
+
+	return munmap(current, addr, length, flags, sync);
 }
 
 int os_munmap(void *addr, size_t length)
 {
-	kernel_debug("munmap addr is 0x%x, length is %d\n", (u32)addr, length);
-	if (!is_aligin((unsigned long)addr, PAGE_SIZE))
-		return -EINVAL;
+	return __os_munmap((unsigned long)addr, length, 0, 0);
+}
 
-	return munmap(current, (unsigned long)addr, page_nr(length));
+int os_msync(void *addr, size_t length, int flags)
+{
+	return __os_munmap((unsigned long)addr, length, flags, 1);
 }

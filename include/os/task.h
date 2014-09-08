@@ -62,6 +62,7 @@ struct mm_struct {
 	struct list_head mmap_mem_list;
 	DECLARE_BITMAP(mmap, PROCESS_USER_MMAP_SIZE >> PAGE_SHIFT);
 	int free_pos;
+	int mmap_nr;
 };
 
 /*
@@ -131,9 +132,9 @@ static inline pt_regs *get_pt_regs(void)
 }
 
 int mmap(struct task_struct *task, unsigned long start,
-			unsigned long virt, int flags);
-
-int munmap(struct task_struct *task, unsigned long start, int pages);
-void *get_task_user_mm_free_base(struct task_struct *task, int page_nr);
+		unsigned long virt, int flags,
+		int fd, offset_t offset);
+int munmap(struct task_struct *task, unsigned long start, size_t length, int flags, int sync);
+unsigned long get_mmap_user_base(struct task_struct *task, int page_nr);
 
 #endif
