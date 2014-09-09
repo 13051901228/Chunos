@@ -284,7 +284,6 @@ int init_sched_struct(struct task_struct *task)
 	task->time_out = 0;
 	task->run_count = 0;
 	task->state = PROCESS_STATE_UNKNOWN;
-	task->exit_state = PROCESS_STATE_UNKNOWN;
 	
 	init_list(&task->prio_running);
 	init_list(&task->system);

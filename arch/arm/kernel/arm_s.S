@@ -67,6 +67,16 @@ arch_switch_task_sw:
 	cmp r1, #SVC_MODE
 	bleq sw_switch_to_svc
 
+	cmp r1, #USER_MODE
+	bne sw_switch_out
+
+	sub sp, sp, #72
+	mov r0, sp
+	bl signal_handler
+	cmp r0, #0
+	addeq sp, sp, #72
+
+sw_switch_out:
 	ldr r1, [sp, #64]	@ cpsr
 	msr spsr, r1
 

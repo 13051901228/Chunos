@@ -391,6 +391,16 @@ int arch_irq_init(void)
 	return 0;
 }
 
+int arch_do_signal(pt_regs *regs, void *handler, void *arg)
+{
+	regs->r0 = (u32)arg;
+	regs->pc = (u32)handler;
+	regs->cpsr = USER_MODE;
+	regs->lr = get_sigreturn_addr();
+
+	return 0;
+}
+
 int arch_init(void)
 {
 	int ret;
