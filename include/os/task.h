@@ -8,6 +8,7 @@
 #include <os/bitops.h>
 #include <os/mm.h>
 #include <os/mirros.h>
+#include <sys/sig.h>
 
 #define KERNEL_STACK_SIZE	(SIZE_4K)
 #define PROCESS_STACK_SIZE	(4 * PAGE_SIZE)		/* 16k stack size */
@@ -91,10 +92,11 @@ struct task_struct {
 
 	pid_t pid;
 	u32 uid;
-	state_t state,exit_state;
-	u32 signal,exit_code;
+	state_t state;
 
+	struct signal_struct signal;
 	struct mm_struct mm_struct;
+
 	struct task_struct *parent;
 	struct list_head child;
 	struct list_head p;
@@ -126,6 +128,7 @@ struct task_struct {
 int kthread_run(char *name, int (*fn)(void *arg), void *arg);
 int kernel_exec(char *filename);
 int kill_task(struct task_struct *task);
+int task_kill_self(struct task_struct *task);
 static inline pt_regs *get_pt_regs(void)
 {
 	return arch_get_pt_regs();

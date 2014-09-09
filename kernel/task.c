@@ -16,6 +16,7 @@
 #include <os/syscall.h>
 #include <os/irq.h>
 #include <os/mmap.h>
+#include <sys/sig.h>
 
 #ifdef	DEBUG_PROCESS
 #define debug(fmt, ...)	kernel_debug(fmt, ##__VA_ARGS__)
@@ -27,6 +28,9 @@
 #define MAX_ENVP	16
 static char *init_argv[MAX_ARGV + 1] = {NULL};
 static char *init_envp[MAX_ENVP + 1] = {NULL};
+
+extern int init_signal_struct(struct task_struct *task);
+extern void copy_sigreturn_code(struct task_struct *task);
 
 static int init_mm_struct(struct task_struct *task, u32 user_sp)
 {
@@ -812,6 +816,8 @@ struct task_struct *fork_new_task(char *name, u32 user_sp, u32 flag)
 	 */
 	init_mm_struct(new, user_sp);
 	init_sched_struct(new);
+	init_signal_struct(new);
+
 	if (name)
 		strncpy(new->name, name, PROCESS_NAME_SIZE);
 
@@ -1095,6 +1101,7 @@ int do_exec(char __user *name,
 	/* must befor load_elf_image, since the memory
 	 * will be overwrited by it */
 	ae_size = setup_task_argv_envp(new, name, argv, envp);
+	copy_sigreturn_code(new);
 
 	/*
 	 * load the elf file to memory, the original process

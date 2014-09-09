@@ -66,10 +66,17 @@ software_interrupt:
 
 	bl _syscall_handler
 
+	mov sp, r8
+
 	mrs r1, cpsr
 	orr r1, r1, #0xc0
 	msr cpsr_c, r1		@disable irq
 
+	sub sp, sp, #72		@ resever 72 byte for signal if need
+	mov r0, sp
+	bl signal_handler
+	cmp r0, #0
+	addeq sp, sp, #72
 	mov r0, sp
 
 	set_mode (SYSTEM_MODE | NO_INT)
@@ -203,6 +210,17 @@ irq:
 	cmp r1, #SVC_MODE		@ if last mode is svc mode
 	bleq exit_exception_from_svc
 
+	cmp r1, #USER_MODE
+	bne _irq_out
+
+	mov r5, r0			@ backup r5
+	sub r0, r0, #72
+	bl signal_handler
+	cmp r0, #0
+	addeq r5, r5, #72
+	mov r0, r5
+
+_irq_out:
 	ldr r1, [r0, #64]
 	msr spsr, r1
 

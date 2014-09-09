@@ -37,6 +37,8 @@ _syscall_handler:
 	ldr r6, [r6]
 	sub r7, r7, #__NR_SYSCALL_BASE
 
+	push {r7}
+
 	add r6, r6, r7, lsl #2
 	ldr r6, [r6]		@ if syscall not inplemented go to out
 	cmp r6, #0
@@ -46,10 +48,23 @@ _syscall_handler:
 	mov lr, pc
 	mov pc, r6		@ goto syscall handler
 
+	pop {r7}
 	sub sp, fp, #4
-
 	pop {r8}		@ will return here, return value is r0
+
 	str r0, [r8]		@ store return valude to process context
 
 	pop {fp, lr}
+
+	cmp r7, #__NR_sigreturn - __NR_SYSCALL_BASE
+	subeq r8, r8, #72	@ if the syscall is sigreturn adjust the sp
+
 	bx lr
+
+.global sigreturn_start
+sigreturn_start:
+	mov r7, #__NR_sigreturn
+	svc 0x0 @will never return
+	mov pc, lr
+.global sigreturn_end
+sigreturn_end:
