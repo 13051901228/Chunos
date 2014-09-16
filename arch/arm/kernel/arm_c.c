@@ -354,14 +354,6 @@ int arch_set_up_task_stack(struct task_struct *task, pt_regs *regs)
 	return 0;
 }
 
-int arch_set_task_return_value(pt_regs *reg,
-		struct task_struct *task)
-{
-	reg->r0 = task->pid;
-
-	return 0;
-}
-
 void data_abort_handler(unsigned long sp)
 {
 	panic("Data aboart exception", sp);
