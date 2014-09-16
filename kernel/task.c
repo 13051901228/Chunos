@@ -786,12 +786,6 @@ static int setup_task_argv_envp(struct task_struct *task,
 	return (argv_sum + env_sum + 1) * sizeof(unsigned long);
 }
 
-static int inline set_task_return_value(pt_regs *reg,
-		struct task_struct *task)
-{
-	return arch_set_task_return_value(reg, task);
-}
-
 struct task_struct *fork_new_task(char *name, u32 user_sp, u32 flag)
 {
 	struct task_struct *new;
@@ -859,14 +853,10 @@ int do_fork(char *name, pt_regs *regs, u32 user_sp, u32 flag)
 	if (flag & PROCESS_TYPE_USER)
 		copy_process(new);
 
-	/* task is forked by sys_fork */
-	if (flag & PROCESS_FLAG_FORK)
-		set_task_return_value(regs, new);
-
 	set_up_task_stack(new, regs);
 	set_task_state(new, PROCESS_STATE_PREPARE);
 
-	return 0;
+	return new->pid;
 }
 
 static void inline init_pt_regs(pt_regs *regs, void *fn, void *arg)
