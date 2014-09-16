@@ -4,6 +4,7 @@
 #include <os/printk.h>
 #include <os/irq.h>
 #include <os/list.h>
+#include <os/errno.h>
 
 int mutex_lock_timeout(struct mutex *m, int ms)
 {
@@ -21,19 +22,20 @@ int mutex_lock_timeout(struct mutex *m, int ms)
 	 * mutex wait. if not change the mutex count value to 1
 	 * the exist.
 	 */
-	enter_critical(&flags);
 
 	for (;;) {
+		enter_critical(&flags);
 		if (m->count) {
 			/*
 			 * if mutex has been locked, then suspend this task
 			 * if task suspend timeout, del it form the list.
 			 */
 			list_add_tail(&m->wait, &task->wait);
+			exit_critical(&flags);
 			timeout = suspend_task_timeout(task, ms);
 			if (timeout) {
 				list_del(&task->wait);
-				goto out;
+				return -ETIMEDOUT;
 			}
 		}
 		else {
@@ -41,11 +43,10 @@ int mutex_lock_timeout(struct mutex *m, int ms)
 			if (task) {
 				list_add_tail(&task->mutex_get, &m->task);
 			}
+			exit_critical(&flags);
 			break;
 		}
 	}
-out:
-	exit_critical(&flags);
 
 	return 0;
 }
