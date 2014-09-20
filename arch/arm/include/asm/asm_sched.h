@@ -6,24 +6,24 @@
 struct task_struct;
 
 typedef struct _pt_regs {
-	u32 r0;
-	u32 r1;
-	u32 r2;
-	u32 r3;
-	u32 r4;
-	u32 r5;
-	u32 r6;
-	u32 r7;
-	u32 r8;
-	u32 r9;
-	u32 r10;
-	u32 r11;
-	u32 r12;
-	u32 spsr;
-	u32 lr;
-	u32 sp;
-	u32 cpsr;
-	u32 pc;
+	unsigned long r0;
+	unsigned long r1;
+	unsigned long r2;
+	unsigned long r3;
+	unsigned long r4;
+	unsigned long r5;
+	unsigned long r6;
+	unsigned long r7;
+	unsigned long r8;
+	unsigned long r9;
+	unsigned long r10;
+	unsigned long r11;
+	unsigned long r12;
+	unsigned long spsr;
+	unsigned long lr;
+	unsigned long sp;
+	unsigned long cpsr;
+	unsigned long pc;
 } pt_regs;
 
 void arch_switch_task_sw(void);

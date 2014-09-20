@@ -383,12 +383,28 @@ int arch_irq_init(void)
 	return 0;
 }
 
-int arch_do_signal(pt_regs *regs, void *handler, void *arg)
+int arch_do_signal(pt_regs *regs,
+		unsigned long user_sp,
+		void *handler, void *arg)
 {
 	regs->r0 = (u32)arg;
 	regs->pc = (u32)handler;
 	regs->cpsr = USER_MODE;
 	regs->lr = get_sigreturn_addr();
+	regs->r1 = 1;
+	regs->r2 = 2;
+	regs->r3 = 3;
+	regs->r4 = 4;
+	regs->r5 = 5;
+	regs->r6 = 6;
+	regs->r7 = 7;
+	regs->r8 = 8;
+	regs->r9 = 9;
+	regs->r10 = 10;
+	regs->r11 = 11;
+	regs->r12 = 12;
+	regs->spsr = 15;
+	regs->sp = user_sp;
 
 	return 0;
 }

@@ -32,6 +32,9 @@ pid_t sys_fork(void)
 	u32 flag = 0;
 	pt_regs *regs = get_pt_regs();
 
+	/* indicate fork will sucessed to generate
+	 * child process */
+	regs->r0 = 0;
 	flag |= PROCESS_TYPE_USER | PROCESS_FLAG_FORK;
 
 	return do_fork(NULL, regs, regs->sp, flag);

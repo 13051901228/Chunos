@@ -59,17 +59,11 @@ arch_switch_task_sw:
 
 	ldr r1, [sp, #64]	@ load cpsr of next process
 	and r1, r1, #MODE_MASK
-	mov r0, sp
-
-	cmp r1, #USER_MODE
-	bleq sw_switch_to_user
-
-	cmp r1, #SVC_MODE
-	bleq sw_switch_to_svc
 
 	cmp r1, #USER_MODE
 	bne sw_switch_out
 
+	ldr r1, [sp, #60]
 	sub sp, sp, #72
 	mov r0, sp
 	bl signal_handler
@@ -77,6 +71,16 @@ arch_switch_task_sw:
 	addeq sp, sp, #72
 
 sw_switch_out:
+	mov r0, sp
+	ldr r1, [sp, #64]
+	and r1, r1, #MODE_MASK
+
+	cmp r1, #USER_MODE
+	bleq sw_switch_to_user
+
+	cmp r1, #SVC_MODE
+	bleq sw_switch_to_svc
+
 	ldr r1, [sp, #64]	@ cpsr
 	msr spsr, r1
 

@@ -72,6 +72,7 @@ software_interrupt:
 	orr r1, r1, #0xc0
 	msr cpsr_c, r1		@disable irq
 
+	ldr r1, [sp, #60]	@ user sp
 	sub sp, sp, #72		@ resever 72 byte for signal if need
 	mov r0, sp
 	bl signal_handler
@@ -172,7 +173,7 @@ irq:
 	cmp r0, #SVC_MODE
 	bleq svc_to_exception		@ if enter irq from svc mode
 	
-	mov r1, sp		@ save sp of irq to r1 and goto svc mode
+	mov r1, sp			@ save sp of irq to r1 and goto svc mode
 	set_mode (SVC_MODE | NO_INT)	@ r0= r1= r2=spsr r3=lr r4=sp
 
 	sub sp, sp, #20			@ reserve for pc cpsr spsr lr sp
@@ -202,6 +203,20 @@ irq:
 	bl os_exit_irq			@ r0 = process context base address
 
 	ldr r1, [r0, #64]		@ load cpsr of last mode of the process
+	and r1, r1, #MODE_MASK		@ check wether return to user mode
+	cmp r1, #USER_MODE
+	bne _irq_out
+
+	mov r5, r0			@ sp backup to r5
+	ldr r1, [r0, #60]
+	sub r0, r0, #72
+	bl signal_handler
+	cmp r0, #1
+	subeq r5, r5, #72
+	mov r0, r5
+
+_irq_out:
+	ldr r1, [r0, #64]		@ load cpsr of last mode of the process
 	and r1, r1, #MODE_MASK
 
 	cmp r1, #USER_MODE		@ if last mode is user mode
@@ -210,17 +225,6 @@ irq:
 	cmp r1, #SVC_MODE		@ if last mode is svc mode
 	bleq exit_exception_from_svc
 
-	cmp r1, #USER_MODE
-	bne _irq_out
-
-	mov r5, r0			@ backup r5
-	sub r0, r0, #72
-	bl signal_handler
-	cmp r0, #0
-	addeq r5, r5, #72
-	mov r0, r5
-
-_irq_out:
 	ldr r1, [r0, #64]
 	msr spsr, r1
 

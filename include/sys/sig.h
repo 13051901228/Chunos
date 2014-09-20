@@ -80,4 +80,18 @@ struct signal_struct {
 	u16 in_signal;
 };
 
+typedef struct {
+	unsigned long sig[MAX_SIGNAL / sizeof(long) >> 3];
+} sigset_t;
+
+struct sigaction {
+	union {
+		sighandler_t sa_handler;
+		void (*_sa_sigaction)(int, void *, void *);
+	} _u;
+	unsigned long sa_flags;
+	void (*sa_restorer)(void);
+	sigset_t sa_mask;
+};
+
 #endif
