@@ -13,10 +13,10 @@ __default_syscall_handler:	.word default_syscall_handler
 
 .global _syscall_handler
 _syscall_handler:
-	push {fp, lr}
+	push {lr}
 	push {r8}
-	add fp, sp, #4
-	sub sp, sp, #24
+
+	sub sp, sp, #12
 
 	ldr r3, [r8, #16]	@ arg4
 	str r3, [sp]
@@ -37,7 +37,7 @@ _syscall_handler:
 	ldr r6, [r6]
 	sub r7, r7, #__NR_SYSCALL_BASE
 
-	push {r7}
+	str r7, [sp, #8]
 
 	add r6, r6, r7, lsl #2
 	ldr r6, [r6]		@ if syscall not inplemented go to out
@@ -48,16 +48,17 @@ _syscall_handler:
 	mov lr, pc
 	mov pc, r6		@ goto syscall handler
 
+	add sp, sp, #8
+
 	pop {r7}
-	sub sp, fp, #4
 	pop {r8}		@ will return here, return value is r0
 
 	str r0, [r8]		@ store return valude to process context
 
-	pop {fp, lr}
+	pop {lr}
 
 	cmp r7, #__NR_sigreturn - __NR_SYSCALL_BASE
-	subeq r8, r8, #72	@ if the syscall is sigreturn adjust the sp
+	addeq r8, r8, #72	@ if the syscall is sigreturn adjust the sp
 
 	bx lr
 
