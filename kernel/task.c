@@ -156,7 +156,7 @@ static int inline release_kernel_stack(struct task_struct *task)
 
 static int release_task_memory(struct task_struct *task)
 {
-
+	/* firset pate table then pages */
 	if (task->flag & PROCESS_TYPE_USER) {
 		release_task_pages(task);
 		release_task_page_table(task);
@@ -986,7 +986,7 @@ int task_kill_self(struct task_struct *task)
 	 * wake up system_killer process to help doing
 	 * this
 	 */
-	debug("Kill self\n");
+	kernel_debug("Kill self\n");
 	set_task_state(task, PROCESS_STATE_IDLE);
 	wakeup_task(system_killer);
 	sched();
@@ -1001,6 +1001,7 @@ int kill_task(struct task_struct *task)
 	struct list_head *list;
 	struct mutex *mutex;
 
+	kernel_debug("kill task\n");
 	if (!task)
 		return -EINVAL;
 	/*
@@ -1041,6 +1042,10 @@ int kill_task(struct task_struct *task)
 	}
 	exit_critical(&flags);
 
+	/* release the file which the task opened */
+	release_task_file_desc(task);
+
+	/* release the memory the task obtained and itself */
 	release_task(task);
 
 	return 0;
