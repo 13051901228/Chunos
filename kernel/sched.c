@@ -314,11 +314,10 @@ pid_t get_new_pid(struct task_struct *task)
 	struct pid_map *map = &pid_map;
 	u32 *base =(u32 *)map->addr;
 
-	mutex_lock(&map->pid_map_mutex);
-
 	if (map->nr_free == 0)
 		goto out;
 
+	mutex_lock(&map->pid_map_mutex);
 	for (i = map->current; i < map->nr; i++) {
 		if (base[i] == 0) {
 			map->nr_free--;
