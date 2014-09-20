@@ -116,5 +116,6 @@ int _sys_ioctl(int fd, u32 cmd, void *arg);
 int _sys_access(char *name, int flag);
 size_t fmsync(int fd, char *buffer, size_t size, offset_t off);
 size_t fmmap(int fd, char *buffer, size_t size, offset_t offset);
+void release_task_file_desc(struct task_struct *task);
 
 #endif

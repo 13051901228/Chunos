@@ -26,7 +26,8 @@ int check_flag(struct fnode *fnode, int flag)
 
 static void release_file(struct file *file)
 {
-	kfree(file);
+	if (file && file->fops && file->fops->close)
+		file->fops->close(file);
 }
 
 struct file *__sys_open(char *name, int flag)
@@ -166,7 +167,7 @@ int _sys_close(int fd)
 		return -ENOENT;
 
 	file = fdes->file_open[fd];
-	file->fops->close(file);
+	release_file(file);
 	fdes->file_open[fd] = NULL;
 	fdes->open_nr--;
 
@@ -192,11 +193,29 @@ struct file_desc *alloc_and_init_file_desc(void)
 		return NULL;
 
 	fd->file_open[0] = __sys_open("/dev/ttyS0", O_RDWR);
-	fd->file_open[1] = fd->file_open[0];
-	fd->file_open[2] = fd->file_open[0];
+	fd->file_open[1] = __sys_open("/dev/ttyS0", O_RDWR);
+	fd->file_open[2] = __sys_open("/dev/ttyS0", O_RDWR);
 	fd->open_nr = 3;
 
 	return fd;
+}
+
+void release_task_file_desc(struct task_struct *task)
+{
+	struct file_desc *fd = task->file_desc;
+	int i;
+	struct file *file;
+
+	if (!fd)
+		return;
+
+	for (i = 0; i < FILE_OPENS; i++) {
+		file = fd->file_open[i];
+		if (file)
+			release_file(file);
+	}
+
+	kfree(fd);
 }
 
 struct file inline *kernel_open(char *name, int flag)
