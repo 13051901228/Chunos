@@ -29,20 +29,25 @@ static size_t tty_read(struct file *file, char *buf, size_t size)
 	return size;
 }
 
-static size_t tty_write(struct file *file, char *buf, size_t size)
+static size_t __tty_write(struct tty *tty, char *buf, size_t size)
 {
-	struct tty *tty = (struct tty *)file->private_data;
-	int i = 0;
 	unsigned long flags;
+	int i;
+
+	if (!tty)
+		return 0;
 
 	spin_lock_irqsave(&tty->tty_lock, &flags);
-
 	for (i = 0; i < size; i++)
 		tty->tty_ops->put_char(tty, buf[i]);
-
 	spin_unlock_irqstore(&tty->tty_lock, &flags);
 
 	return size;
+}
+
+static size_t tty_write(struct file *file, char *buf, size_t size)
+{
+	return __tty_write((struct tty *)file->private_data, buf, size);
 }
 
 static int tty_ioctl(struct file *file, int cmd, void *arg)
@@ -155,8 +160,7 @@ int tty_flush_log(char *buf, int size)
 
 		if (tty->is_console) {
 			printed = 1;
-			for (i = 0; i < size; i++)
-				tty->tty_ops->put_char(tty, buf[i]);
+			__tty_write(tty, buf, size);
 		}
 	}
 
