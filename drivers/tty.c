@@ -31,16 +31,15 @@ static size_t tty_read(struct file *file, char *buf, size_t size)
 
 static size_t __tty_write(struct tty *tty, char *buf, size_t size)
 {
-	unsigned long flags;
 	int i;
 
 	if (!tty)
 		return 0;
 
-	spin_lock_irqsave(&tty->tty_lock, &flags);
+	spin_lock_irqsave(&tty->tty_lock);
 	for (i = 0; i < size; i++)
 		tty->tty_ops->put_char(tty, buf[i]);
-	spin_unlock_irqstore(&tty->tty_lock, &flags);
+	spin_unlock_irqstore(&tty->tty_lock);
 
 	return size;
 }

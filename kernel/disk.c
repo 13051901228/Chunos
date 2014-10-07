@@ -75,19 +75,18 @@ static int init_disk(struct disk *disk, struct disk_operations *ops, char *buf)
 {
 	struct bdev *bdev;
 	int i;
-	unsigned long flags;
 
 	/* this function can be called in booting time 
 	 * so we should use spinlock_irqsave
 	 */
-	spin_lock_irqsave(&disk_lock, &flags);
+	spin_lock_irqsave(&disk_lock);
 	if (major_current == MAX_DISK) {
-		spin_unlock_irqstore(&disk_lock, &flags);
+		spin_unlock_irqstore(&disk_lock);
 		return -ENOMEM;
 	}
 	disk_table[major_current] = disk;
 	major_current++;
-	spin_unlock_irqstore(&disk_lock, &flags);
+	spin_unlock_irqstore(&disk_lock);
 
 	init_mutex(&disk->disk_mutex);
 	disk->ops = ops;

@@ -188,7 +188,6 @@ int level_printk(const char *fmt,...)
 	va_list arg;
 	int printed;
 	ch = *fmt;
-	unsigned long flags;
 	char buf[1024];
 
 	if (is_digit(ch)) {
@@ -203,9 +202,9 @@ int level_printk(const char *fmt,...)
 	printed = vsprintf(buf, fmt, arg);
 	va_end(arg);
 
-	spin_lock_irqsave(&log_buffer.buffer_lock, &flags);
+	spin_lock_irqsave(&log_buffer.buffer_lock);
 	update_log_buffer(buf, printed);
-	spin_unlock_irqstore(&log_buffer.buffer_lock, &flags);
+	spin_unlock_irqstore(&log_buffer.buffer_lock);
 
 	if (!tty_flush_log(buf, printed)) {
 		early_printk(buf);
