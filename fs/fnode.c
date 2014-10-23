@@ -40,7 +40,7 @@ char *get_iname_buffer(void)
 	char *ret = NULL;
 	int i;
 
-	spin_lock(&iname_buffer_lock);
+	spin_lock_irqsave(&iname_buffer_lock);
 	for (i = 0; i < INAME_NR; i++) {
 		if (!read_bit(iname_buffer, i)) {
 			set_bit(iname_buffer, i);
@@ -50,7 +50,7 @@ char *get_iname_buffer(void)
 	}
 
 out:
-	spin_unlock(&iname_buffer_lock);
+	spin_unlock_irqstore(&iname_buffer_lock);
 	return ret;
 }
 
