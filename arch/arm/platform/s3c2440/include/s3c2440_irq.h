@@ -36,6 +36,15 @@
 #define SPI1            29
 #define RTC             30
 #define ADC             31
+#define UART0_RXD0	32
+#define UART0_TXD0	33
+#define UART0_ERR0	34
+#define UART1_RXD1	35
+#define UART1_TXD1	36
+#define UART1_ERR1	37
+#define UART2_RXD2	38
+#define UART2_TXD2	39
+#define UART2_ERR2	40
 
 //define submark of the interrupt
 #define AC_97           14

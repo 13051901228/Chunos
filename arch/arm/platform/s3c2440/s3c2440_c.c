@@ -87,7 +87,7 @@ u32 s3c2440_clk_init(void)
 	return FCLK;
 }
 
-int s3c2440_system_timer_init(int hz)
+int s3c2440_system_timer_init(u32 hz)
 {
 	timer_base = request_io_mem(TIMER_BASE);
 	if (timer_base == NULL) {
@@ -126,87 +126,92 @@ int s3c2440_irq_init(struct irq_chip *chip)
 	return 0;
 }
 
-int s3c2440_disable_irq(int nr)
+int s3c2440_do_enable_irq(int nr, int enable)
 {
 	u32 int_msk = ioread32(irq_base + INTMSK);
 	u32 int_submsk = ioread32(irq_base + INTSUBMSK);
 
-	/* get the intmsk and int mode */
-	int_msk |= bit(nr);
+	if (nr < 0 || nr > 48)
+		return -EINVAL;
 
 	/* get the value of submsk */
 	switch (nr) {
-		case WDT_AC97:
-			int_submsk |= (bit(AC_97) | bit(WDT));
-			break;
-		case UART0:
-			int_submsk |= (bit(RXD0) | bit(TXD0) | bit(ERR0));
-			break;
-		case UART1:
-			int_submsk |= ((bit(RXD1)) | (bit(TXD1)) | (bit(ERR1)));
-			break;
-		case UART2:
-			int_submsk |= (bit(RXD2) | bit(TXD2) | bit(ERR2));
-			break;
-		case ADC:
-			int_submsk |= ((bit(ADC_S)) | (bit(TC)));
-			break;
-		case CAM:
-			int_submsk |= ((bit(CAM_P)) | (bit(CAM_C)));
-			break;
-		default:
-			break;
+	case WDT_AC97:
+	case UART0:
+	case UART1:
+	case UART2:
+	case ADC:
+	case CAM:
+		kernel_error("please spcific the subirq\n");
+		return -EINVAL;
+	default:
+		break;
+	}
+
+	if (enable) {
+		if (nr > 31 && nr < 48)
+			int_submsk &= ~bit(nr - 32);
+		int_msk &= (~bit(nr));
+	} else {
+		if (nr > 31 && nr < 48)
+			int_submsk |= bit(nr - 32);
+		int_msk |= bit(nr);
 	}
 
 	iowrite32(int_msk, irq_base + INTMSK);
 	iowrite32(int_submsk, irq_base + INTSUBMSK);
-
 	return 0;
+}
+
+int s3c2440_disable_irq(int nr)
+{
+	return s3c2440_do_enable_irq(nr, 0);
 }
 
 int s3c2440_enable_irq(int nr, u32 flags)
 {
-	int int_msk = ioread32(irq_base + INTMSK);
-	int int_submsk = ioread32(irq_base + INTSUBMSK);
-
-	/* get the intmsk and int mode */
-	int_msk &= ~bit(nr);
-
-	/* get the value of submsk */
-	switch (nr) {
-		case WDT_AC97:
-			int_submsk &= ((~bit(AC_97)) & (~bit(WDT)));
-			break;
-		case UART0:
-			int_submsk = int_submsk & ((~bit(RXD0)));
-			break;
-		case UART1:
-			int_submsk &= ((~bit(RXD1)) & (~bit(TXD1)) & (~bit(ERR1)));
-			break;
-		case UART2:
-			int_submsk &= ( (~bit(RXD2)) & (~bit(TXD2)) & (~bit(ERR2)));
-			break;
-		case ADC:
-			int_submsk &= ((~bit(ADC_S)) & (~bit(TC)));
-			break;
-		case CAM:
-			int_submsk &= ((~bit(CAM_P)) & (~bit(CAM_C)));
-			break;
-		default:
-			break;
-	}
-
-	iowrite32(int_msk, irq_base + INTMSK);
-	iowrite32(int_submsk, irq_base + INTSUBMSK);
-
-	return 0;
+	return s3c2440_do_enable_irq(nr, 1);
 }
 
 int s3c2440_clean_irq_pending(int nr)
 {
-	iowrite32(ioread32(irq_base + SUBSRCPND), irq_base + SUBSRCPND);
-	iowrite32(ioread32(irq_base + SRCPND), irq_base + SRCPND);
-	iowrite32(ioread32(irq_base + INTPND), irq_base + INTPND);
+	unsigned long src_pnd = 0;
+	unsigned long subsrc_pnd = 0;
+
+	/* TBC */
+	if (nr > 31) {
+		switch (nr) {
+		case UART0_RXD0:
+		case UART0_TXD0:
+		case UART0_ERR0:
+			src_pnd |= bit(UART0);
+			break;
+
+		case UART1_RXD1:
+		case UART1_TXD1:
+		case UART1_ERR1:
+			src_pnd |= bit(UART1);
+			break;
+
+		case UART2_RXD2:
+		case UART2_TXD2:
+		case UART2_ERR2:
+			src_pnd |= bit(UART2);
+			break;
+
+		/* TBC for other subirq */
+		default:
+			break;
+		}
+
+		subsrc_pnd |= bit(nr - 32);
+	} else {
+		src_pnd |= bit(nr);
+	}
+
+	iowrite32(subsrc_pnd, irq_base + SUBSRCPND);
+	iowrite32(src_pnd, irq_base + SRCPND);
+	iowrite32(src_pnd, irq_base + INTPND);
 
 	return 0;
 }

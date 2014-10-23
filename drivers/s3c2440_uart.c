@@ -192,7 +192,7 @@ static int s3c2440_uart_init(void)
 	}
 
 	/* only register irq handler for irq0 */
-	register_irq(28, s3c2440_uart_irq_handler, (void *)&uart[0]);
+	register_irq(32, s3c2440_uart_irq_handler, (void *)&uart[0]);
 	
 	return 0;
 }
