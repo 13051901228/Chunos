@@ -57,7 +57,7 @@ typedef u8			bool;
 #define container_of(ptr,name,member) \
 	(name *)((unsigned char *)ptr - ((unsigned char *)&(((name *)0)->member)))
 
-#define bit(nr) (1 << nr)
+#define bit(nr) (1 << (nr))
 
 #define __user
 
