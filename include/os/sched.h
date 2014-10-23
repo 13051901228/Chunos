@@ -26,5 +26,6 @@ int release_pid(struct task_struct *task);
 struct task_struct *pid_get_task(pid_t pid);
 
 #define suspend_task(task)	suspend_task_timeout(task, -1);
+#define suspend()		suspend_task(current);
 
 #endif
