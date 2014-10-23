@@ -178,7 +178,7 @@ int s3c2440_enable_irq(int nr, u32 flags)
 			int_submsk &= ((~bit(AC_97)) & (~bit(WDT)));
 			break;
 		case UART0:
-			int_submsk &= ((~bit(RXD0)) & (~bit(TXD0)) & (~bit(ERR0)));
+			int_submsk = int_submsk & ((~bit(RXD0)));
 			break;
 		case UART1:
 			int_submsk &= ((~bit(RXD1)) & (~bit(TXD1)) & (~bit(ERR1)));

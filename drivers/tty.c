@@ -26,22 +26,15 @@ static int tty_open(struct file *file, int flag)
 
 static size_t tty_read(struct file *file, char *buf, size_t size)
 {
-	return size;
+	struct tty *tty = file->private_data;
+
+	return tty ? tty->tty_ops->get_chars(tty, buf, size) : 0;
 }
 
 static size_t __tty_write(struct tty *tty, char *buf, size_t size)
 {
-	int i;
 
-	if (!tty)
-		return 0;
-
-	spin_lock_irqsave(&tty->tty_lock);
-	for (i = 0; i < size; i++)
-		tty->tty_ops->put_char(tty, buf[i]);
-	spin_unlock_irqstore(&tty->tty_lock);
-
-	return size;
+	return tty ? tty->tty_ops->put_chars(tty, buf, size) : 0;
 }
 
 static size_t tty_write(struct file *file, char *buf, size_t size)
@@ -94,7 +87,6 @@ struct tty *allocate_tty(void)
 	tty->dev = dev;
 	tty->tty_ops = NULL;
 	tty->is_console = 0;
-	spin_lock_init(&tty->tty_lock);
 
 	return tty;
 

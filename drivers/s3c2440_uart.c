@@ -9,6 +9,7 @@
 #include <os/tty.h>
 #include <os/kernel.h>
 #include <os/io.h>
+#include <os/sched.h>
 
 #define UART_BASE	0x50000000
 #define ULCON0		0x00		//UART 0 Line contol
@@ -59,10 +60,16 @@
 #define URXH		0x24		//UART  Receive buffe
 #define UBRDIV		0x28		//UART  Baud ate diviso
 
+#define S3C2440_UART_BUF_SIZE		512
+
 struct s3c2440_uart {
 	struct tty *tty;
 	void *io_base;
 	int nr;
+	char *buf;
+	int buf_size;
+	spin_lock_t ulock;
+	struct task_struct *wait;
 };
 
 static struct s3c2440_uart uart[3];
@@ -73,10 +80,11 @@ int s3c2440_uart_open(struct tty *tty)
 	struct s3c2440_uart *uart = tty->dev->pdata;
 
 	if (uart == 0) {
-		iowrite32(0x1, uart->io_base + UFCON0);
+		iowrite32(0x1 | (3 << 4), uart->io_base + UFCON0);
 		iowrite32(0x0, uart->io_base + UMCON0);
 		iowrite32(0x03, uart->io_base + ULCON0);
-		iowrite32(0x345, uart->io_base + UCON0);
+		/* RX use interrupt mode */
+		iowrite32(0X145, uart->io_base + UCON0);
 	} else {
 		/* TBC */
 	}
@@ -84,19 +92,44 @@ int s3c2440_uart_open(struct tty *tty)
 	return 0;
 }
 
-void s3c2440_uart_put_char(struct tty *tty, char ch)
+size_t s3c2440_uart_put_chars(struct tty *tty, char *buf, size_t size)
+{
+	struct s3c2440_uart *uart = tty->dev->pdata;
+	int i;
+
+	spin_lock_irqsave(&uart->ulock);
+	for (i = 0; i < size; i++) {
+		if (buf[i] == '\n')
+			iowrite8('\r', uart->io_base + UTXH);
+
+		iowrite8(buf[i], uart->io_base + UTXH);
+	}
+	spin_unlock_irqstore(&uart->ulock);
+
+	return size;
+}
+
+size_t s3c2440_uart_get_chars(struct tty *tty, char *buf, size_t size)
 {
 	struct s3c2440_uart *uart = tty->dev->pdata;
 
-	if (ch == '\n')
-		iowrite8('\r', uart->io_base + UTXH);
+	/* tbc */
+	spin_lock_irqsave(&uart->ulock);
+	if (uart->wait) {
+		spin_unlock_irqstore(&uart->ulock);
+		return -EAGAIN;
+	}
 
-	iowrite8(ch, uart->io_base + UTXH);
-}
+	uart->buf_size = 0;
+	uart->wait = current;
+	spin_unlock_irqstore(&uart->ulock);
+	suspend();
 
-char s3c2440_uart_get_char(struct tty *tty)
-{
-	return 0;
+	spin_lock_irqsave(&uart->ulock);
+	memcpy(buf, uart->buf, MIN(uart->buf_size, size));
+	spin_unlock_irqstore(&uart->ulock);
+
+	return MIN(uart->buf_size, size);
 }
 
 int s3c2440_uart_set_baud(struct tty *tty, u32 baud)
@@ -112,11 +145,24 @@ int s3c2440_uart_set_baud(struct tty *tty, u32 baud)
 }
 
 static struct tty_operations s3c2440_uart_ops = {
-	.put_char = s3c2440_uart_put_char,
-	.get_char = s3c2440_uart_get_char,
+	.put_chars = s3c2440_uart_put_chars,
+	.get_chars = s3c2440_uart_get_chars,
 	.open 	  = s3c2440_uart_open,
 	.set_baud = s3c2440_uart_set_baud,
 };
+
+int s3c2440_uart_irq_handler(void *arg)
+{
+	struct s3c2440_uart *uart = (struct s3c2440_uart *)arg;
+
+	/* here only care RX interrupt, others TBD */
+	while ((ioread32(uart->io_base + UFSTAT) & 0x1f) > 0) {
+		uart->buf[uart->buf_size] = ioread8(uart->io_base + URXH);
+		uart->buf_size++;
+	}
+
+	return 0;
+}
 
 static int s3c2440_uart_init(void)
 {
@@ -138,9 +184,15 @@ static int s3c2440_uart_init(void)
 		uart[i].tty = tty;
 		uart[i].nr = i;
 		tty->dev->pdata = &uart[i];
+		spin_lock_init(&uart[i].ulock);
+		uart[i].buf = kzalloc(S3C2440_UART_BUF_SIZE, GFP_KERNEL);
+		uart[i].buf_size = 0;
 
 		register_tty(tty);
 	}
+
+	/* only register irq handler for irq0 */
+	register_irq(28, s3c2440_uart_irq_handler, (void *)&uart[0]);
 	
 	return 0;
 }

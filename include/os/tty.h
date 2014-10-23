@@ -30,8 +30,8 @@ struct tty;
 
 struct tty_operations {
 	int (*open)(struct tty *tty);
-	void (*put_char)(struct tty *tty, char ch);
-	char (*get_char)(struct tty *tty);
+	size_t (*put_chars)(struct tty *tty, char *buf, size_t size);
+	size_t (*get_chars)(struct tty *tty, char *buf, size_t size);
 	int (*set_baud)(struct tty *tty, u32 baud);
 };
 
@@ -40,7 +40,6 @@ struct tty {
 	u32 baud;
 	struct termios termios;
 	struct tty_operations *tty_ops;
-	spin_lock_t tty_lock;
 	bool is_console;
 };
 
