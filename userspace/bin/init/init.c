@@ -14,7 +14,6 @@ int main(int argc, char **argv)
 	int pid;
 
 	printf("init process of system %d %s\n", argc, argv[0]);
-	while (1);
 
 	pid = fork();
 	if (pid == 0) {

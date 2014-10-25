@@ -123,4 +123,5 @@ run:
 	@ cd tools/skyeye && skyeye -c ./skyeye.conf
 
 app:
-	cd userspace/bin/ && make
+	@ cd userspace/bin/ && make
+	@ cp -r userspace/etc out/ramdisk
