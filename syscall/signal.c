@@ -108,7 +108,7 @@ int sigaction(int signum, const struct sigaction *act,
 
 	return 0;
 }
-DEFINE_SYSCALL(sigaction, __NR_rt_sigaction, (void *)sigaction);
+DEFINE_SYSCALL(sigaction, __NR_sigaction, (void *)sigaction);
 DEFINE_SYSCALL(rt_sigaction, __NR_rt_sigaction, (void *)sigaction);
 
 static void sys_sigreturn(void)
