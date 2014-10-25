@@ -179,7 +179,7 @@ struct mount_point *get_mount_point(char *file_name)
 
 	while (tmp) {
 		len = strlen(tmp->path);
-		printk("tmp_path %s file_name %s\n", tmp->path, file_name);
+		kernel_debug("tmp_path %s file_name %s\n", tmp->path, file_name);
 		/* if new length of mount point big than old */
 		if (len > len_old) {
 			if (len <= file_len) {
