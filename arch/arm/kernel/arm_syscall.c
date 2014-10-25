@@ -112,3 +112,9 @@ int sys_fstat(int fd, struct stat *stat)
 	return _sys_fstat(fd, stat);
 }
 DEFINE_SYSCALL(fstat, __NR_fstat, (void *)sys_fstat);
+
+int sys_ioctl(int fd, int request, void *arg)
+{
+	return _sys_ioctl(fd, request, arg);
+}
+DEFINE_SYSCALL(ioctl, __NR_ioctl, (void *)sys_ioctl);
