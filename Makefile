@@ -125,3 +125,4 @@ run:
 app:
 	@ cd userspace/bin/ && make
 	@ cp -r userspace/etc out/ramdisk
+	@ mkdir -p $(OUT_RAMDISK)/home/root

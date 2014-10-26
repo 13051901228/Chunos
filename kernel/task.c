@@ -89,7 +89,7 @@ static int init_task_struct(struct task_struct *task, u32 flag)
 	 * if process is a userspace process, init the file desc
 	 */
 	if (flag & PROCESS_TYPE_USER) {
-		task->file_desc = alloc_and_init_file_desc();
+		task->file_desc = alloc_and_init_file_desc(parent->file_desc);
 		if (!task->file_desc)
 			return -ENOMEM;
 	}

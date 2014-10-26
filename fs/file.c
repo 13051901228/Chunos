@@ -11,6 +11,7 @@
 #include <os/vfs.h>
 #include <sys/stat.h>
 #include <os/device.h>
+#include <os/syscall.h>
 
 extern struct file_operations vfs_ops;
 
@@ -184,7 +185,7 @@ int _sys_getdents(int fd, char *buf, int count)
 	return vfs_getdents(file, buf, count);
 }
 
-struct file_desc *alloc_and_init_file_desc(void)
+struct file_desc *alloc_and_init_file_desc(struct file_desc *p)
 {
 	struct file_desc *fd;
 
@@ -192,10 +193,24 @@ struct file_desc *alloc_and_init_file_desc(void)
 	if (!fd)
 		return NULL;
 
+	fd->cdir_name = kzalloc(256, GFP_KERNEL);
+	if (!fd->cdir_name) {
+		kfree(fd);
+		return NULL;
+	}
+
 	fd->file_open[0] = __sys_open("/dev/ttyS0", O_RDWR);
 	fd->file_open[1] = __sys_open("/dev/ttyS0", O_RDWR);
 	fd->file_open[2] = __sys_open("/dev/ttyS0", O_RDWR);
 	fd->open_nr = 3;
+
+	/* !init */
+	if (p)
+		strcpy(fd->cdir_name, p->cdir_name);
+	else
+		strcpy(fd->cdir_name, "/home/root");
+
+	fd->cdir = get_file_fnode(fd->cdir_name, O_RDWR | O_DIRECTORY);
 
 	return fd;
 }
@@ -215,6 +230,7 @@ void release_task_file_desc(struct task_struct *task)
 			release_file(file);
 	}
 
+	kfree(fd->cdir_name);
 	kfree(fd);
 }
 
@@ -330,3 +346,33 @@ size_t fmsync(int fd, char *buffer, size_t size, offset_t off)
 
 	return file->fops->msync(file, buffer, size, off);
 }
+
+int sys_chdir(const char *path)
+{
+	struct file_desc *fdes = current->file_desc;
+
+	/* need assume that userspace has deal with the name */
+	if (!path)
+		return -EINVAL;
+
+	/* cd to current directory */
+	if (!strcmp(path, fdes->cdir_name)) {
+		if (fdes->cdir)
+			return 0;
+	}
+
+	/* if the current path is opened, needed to
+	 * free the current fnode */
+	if (fdes->cdir) {
+		release_fnode(fdes->cdir);
+		fdes->cdir = NULL;
+	}
+
+	fdes->cdir = get_file_fnode(path, O_RDWR | O_DIRECTORY);
+	if (!fdes->cdir)
+		return -ENOENT;
+
+	strcpy(fdes->cdir_name, path);
+	return 0;
+}
+DEFINE_SYSCALL(chdir, __NR_chdir, sys_chdir);

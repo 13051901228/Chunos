@@ -97,11 +97,12 @@ struct file_desc {
 	int open_nr;
 	int fd;
 	struct file *file_open[FILE_OPENS];
-	dir *cdir;
-	dir *pre_dir;
+
+	struct fnode *cdir;
+	char *cdir_name;
 };
 
-struct file_desc *alloc_and_init_file_desc(void);
+struct file_desc *alloc_and_init_file_desc(struct file_desc *p);
 struct file *kernel_open(char *name, int flag);
 size_t kernel_read(struct file *file, char *buffer, size_t size);
 size_t kernel_write(struct file *file, char *buffer, size_t size);
