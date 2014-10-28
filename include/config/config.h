@@ -1,7 +1,7 @@
 #ifndef _CONFIG_H
 #define _CONFIG_H
 
-#define LOG_LEVEL			4
+#define LOG_LEVEL			3
 
 #define HZ				100
 
