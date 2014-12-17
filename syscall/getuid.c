@@ -5,7 +5,7 @@
  */
 
 #include <os/kernel.h>
-#include <errno.h>
+#include <os/errno.h>
 #include <os/printk.h>
 #include <os/syscall.h>
 #include <os/syscall_nr.h>

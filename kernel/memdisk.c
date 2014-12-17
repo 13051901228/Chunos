@@ -3,7 +3,7 @@
 
 #define MEMDISK_SECTOR_SIZE	512
 
-extern unsigned long __ramdisk_start;
+unsigned long __ramdisk_start;
 
 #define MEMDISK_ADDRESS(sector)	\
 	(char *)(__ramdisk_start + sector * MEMDISK_SECTOR_SIZE)

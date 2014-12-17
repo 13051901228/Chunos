@@ -125,6 +125,8 @@ struct task_struct {
 	void *message;
 };
 
+extern pt_regs *arch_get_pt_regs(void);
+
 int kthread_run(char *name, int (*fn)(void *arg), void *arg);
 int kernel_exec(char *filename);
 int kill_task(struct task_struct *task);

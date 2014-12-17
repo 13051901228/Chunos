@@ -8,9 +8,14 @@
 #include <sys/sig.h>
 #include <os/kernel.h>
 #include <os/syscall.h>
+#include <asm/asm_sched.h>
 #include <os/sched.h>
 
-extern int arch_do_signal(pt_regs *, unsigned long, void *, void *);
+int arch_do_signal(pt_regs *regs, unsigned long user_sp,
+		 sighandler_t handler, void *arg)
+{
+	return 0;
+}
 
 static inline int os_do_signal(pt_regs *regs, unsigned long user_sp,
 			       sighandler_t handler, void *arg)
@@ -57,8 +62,8 @@ int signal_handler(pt_regs *regs, unsigned long user_sp)
 void copy_sigreturn_code(struct task_struct *task)
 {
 	struct list_head *list = &task->mm_struct.elf_image_list;
-	extern char sigreturn_start[];
-	extern char sigreturn_end[];
+	char sigreturn_start[16];
+	char sigreturn_end[16];
 	unsigned long load_base;
 
 	list = list_next(list);

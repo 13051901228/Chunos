@@ -179,7 +179,7 @@ char *strchr(char *src, char ch)
 	return (char *)src;
 }
 
-#if 0
+#if 1
 int memcpy(void *target, void *source, int size)
 {
 	char *t = (char *)target;

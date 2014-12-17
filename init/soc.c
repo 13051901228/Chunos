@@ -14,8 +14,15 @@
 struct soc system_soc;
 extern struct soc_desc soc_desc;
 
-extern int soc_console_early_init(int baud);
-extern int soc_console_late_init(int baud);
+int soc_console_early_init(int baud)
+{
+	return 0;
+}
+
+int soc_console_late_init(int baud)
+{
+	return 0;
+}
 
 extern int os_tick_handler(void *arg);
 
@@ -126,7 +133,7 @@ static void __init_text soc_get_mem_info(struct soc *soc)
 	/* these value must set at lds or boot.S */
 	extern u32 code_start, code_end;
 	extern u32 bss_start, bss_end;
-	extern u32 kernel_virtual_start, kernel_phy_start;
+	u32 kernel_virtual_start, kernel_phy_start;
 	extern u32 init_start, init_end;
 	struct soc_memory_info *memory_info = get_soc_memory_info();
 

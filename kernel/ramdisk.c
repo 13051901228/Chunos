@@ -7,7 +7,7 @@
 #include <os/slab.h>
 #include <os/mm.h>
 
-extern unsigned long __ramdisk_start;
+unsigned long __ramdisk_start;
 static struct ramdisk_header *ramdisk_header = NULL;
 static struct file_header *file_header = NULL;
 

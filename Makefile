@@ -1,19 +1,19 @@
-ARCH 		:= arm
-CROSS_COMPILE 	:= $(ARCH)-linux-
+ARCH 		:= x86
+CROSS_COMPILE 	:= i686-linux-android-
 CC 		:= $(CROSS_COMPILE)gcc
 LD 		:= $(CROSS_COMPILE)ld
 OBJ_COPY	:= $(CROSS_COMPILE)objcopy
 OBJ_DUMP 	:= $(CROSS_COMPILE)objdump
 
-PLATFORM	:= s3c2440
-BOARD		:= tq2440
+PLATFORM	:= sofia
+BOARD		:= sofia-svb
 
 INCLUDE_DIR 	:= include/os/*.h include/asm/*.h include/config/*.h include/sys/*.h
 
 CCFLAG 		:=-Wall -nostdlib -fno-builtin -g -I$(PWD)/include
 LDS 		:= arch/$(ARCH)/kernel/lds/kernel.lds
 LDFLAG 		:= -T$(LDS)
-LDPATH 		:= -L/opt/FriendlyARM/toolschain/4.4.3/lib/gcc/arm-none-linux-gnueabi/4.4.3 -lgcc
+LDPATH 		:= -L/opt/i686-linux-android-4.6/lib/gcc/i686-linux-android/4.6.x-google -lgcc
 
 OUT 		:= out
 OUT_KERNEL 	= $(OUT)/kernel
@@ -77,13 +77,13 @@ $(OUT) $(OUT_KERNEL) $(OUT_ARCH) $(OUT_PLATFORM) $(OUT_BOARD) $(OUT_FS) $(OUT_DR
 out/$(ARCH)/arch_ramdisk.o: arch/$(ARCH)/kernel/arch_ramdisk.S $(INCLUDE_DIR) out/ramdisk.img
 	$(CC) $(CCFLAG) -c $< -o $@
 
-$(OUT_ARCH)/%.o: %.c $(INCLUDE_DIR) arch/$(ARCH)/kernel/include/*.h
+$(OUT_ARCH)/%.o: %.c $(INCLUDE_DIR)
 	$(CC) $(CCFLAG) -c $< -o $@
 
-$(OUT_ARCH)/boot.o: arch/$(ARCH)/kernel/boot.S $(INCLUDE_DIR) arch/$(ARCH)/kernel/include/*.h
+$(OUT_ARCH)/boot.o: arch/$(ARCH)/kernel/boot.S $(INCLUDE_DIR)
 	$(CC) $(CCFLAG) -c arch/$(ARCH)/kernel/boot.S -o $@
 
-$(OUT_ARCH)/%.o: %.S $(INCLUDE_DIR) arch/$(ARCH)/kernel/include/*.h
+$(OUT_ARCH)/%.o: %.S $(INCLUDE_DIR) 
 	$(CC) $(CCFLAG) -c $< -o $@
 
 $(OUT_KERNEL)/%.o: %.c $(INCLUDE_DIR)
