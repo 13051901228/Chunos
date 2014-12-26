@@ -1,13 +1,41 @@
 	.text
 
+#include "include/x86_config.h"
+
 .macro va_to_pa, reg, va
-	lea $va, \reg
+	lea \va, \reg
 	sub %ebp, \reg
+.endm
+
+.macro build_pde_entry, reg_t, reg_pa
 .endm
 
 .global _start
 _start:
-	jmp reset
+	cli
+
+	lgdt gdt_table			# setup new gdt for kernel
+
+	mov $0x02, %ax			# load ds
+	mov %ax, %ds
+
+	mov $0x03, %ax			# load ss
+	mov %ax, %ss
+
+	mov $0x04, %ax			# load es
+	mov %ax, %es
+
+	mov $0x05, %ax			# load fs
+	mov %ax, %fs
+
+	mov $0x06, %ax			# load gs
+	mov %ax, %gs
+
+	mov %cr0, %ebx			# ensure the code is in protect mode
+	bts $0, %eax
+	mov %eax, %cr0
+
+	jmp $0x01:reset			# load new cs and goto reset
 	
 	.align 4
 
@@ -27,10 +55,8 @@ soc_desc:
 	.short		0	
 
 	.align 4
-
-reset:					# eax is the start phsyic address of the kernel seted by bootloader
-	cli
-	mov $0x1000a000, %eax
+reset:
+	mov $0x1000a000, %eax		# temp code, bootloader need to tell the physical start address of kernel
 
 	lea _start, %ebp
 	sub %ebp, %ebp			# ebp is the pv offset before the gdt is loaded
@@ -75,14 +101,7 @@ clear_bss:
 	jmp 1b
 end_clear_bss:
 
-	jmp set_boot_pageing		# setup pageing for kernel space
-
-					# setup gdt
-					# enable paging
-loop:
-	jmp main
-
-set_boot_pageing:
+set_boot_pde:
 	va_to_pa %eax, $KERNEL_PDE_BASE_ADDRESS	# eax : pde table base address
 	va_to_pa %ebx, $kernel_phy_start
 	mov (%ebx), %ebx			# ebx : the physic base address of the kernel
@@ -102,11 +121,51 @@ set_boot_pageing:
 	add $4, (%eax)
 	sub $4, (%edx)
 end_set_boot_pde:
-	ret
+
+	mov $KERNEL_STACK_BASE, %esp		# setup stack for kernel
+
+copy_gdt:
+	lea gtd_table, %eax
+	lea gtd_table_end, %ecx
+	sub %eax, %ecx
+	shl $2, %ecx
+	va_to_pa %esi, gdt_table
+	va_to_pa %edi, $SYSTEM_GDT_BASE
+	rep movsd
+
+set_pde_base:
+	va_to_pa %eax, $KERNEL_PDE_BASE_ADDRESS	# set paging base address
+	mov %eax, %cr3				
+
+enable_paging:
+	mov %cr0, %eax				# enable paging
+	bts $31, %eax
+	mov %eax, %cr0
+
+goto_main:
+	va_to_pa %eax, __main			# goto main
+	mov (%eax), %eax
+	jmp eax
+
+loop:
+	jmp loop
+
+__main:
+	.long main
 
 	.align 8
-gdt_table:
+gdt_table:				# base 0 limit 0xfffff
 	.quad 0x0			# first entry is NULL
-	.quad 0x0			# kernel mode gdt for cs ds es
-	.quad 0x0			# user mode gdt for cs ds es
-	.quad 0x0			# tss for kernel all task will share one tss
+	.quad 0x00cf9a000000ffff	# kernel cs
+	.quad 0x00cf92000000ffff	# kernel ds expand-up
+	.quad 0x00cf96000000ffff	# kernel ss expand-down
+	.quad 0x00cf92000000ffff	# kernel es expand-up
+	.quad 0x00cf92000000ffff	# kernel fs expand-up
+	.quad 0x00cf92000000ffff	# kernel gs expand-up
+	.quad 0x00cffa000000ffff	# user cs
+	.quad 0x00cff2000000ffff	# user ds expand-up
+	.quad 0x00cff6000000ffff	# user ss expand-down
+	.quad 0x00cff2000000ffff	# user es expand-up
+	.quad 0x00cff2000000ffff	# user fs expand-up
+	.quad 0x00cff2000000ffff	# user gs expand-up
+gdt_table_end:
