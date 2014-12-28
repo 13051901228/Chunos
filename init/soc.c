@@ -14,16 +14,6 @@
 struct soc system_soc;
 extern struct soc_desc soc_desc;
 
-int soc_console_early_init(int baud)
-{
-	return 0;
-}
-
-int soc_console_late_init(int baud)
-{
-	return 0;
-}
-
 extern int os_tick_handler(void *arg);
 
 static int __init_text find_system_soc(struct soc *soc)
@@ -150,6 +140,9 @@ static void __init_text soc_get_mem_info(struct soc *soc)
 	memory_info->bss_end = bss_end;
 	memory_info->kernel_virtual_start = kernel_virtual_start;
 	memory_info->kernel_physical_start = kernel_phy_start;
+
+	if (soc->platform.parse_memory_info)
+		soc->platform.parse_memory_info();
 
 	if (soc->board.parse_memory_info)
 		soc->board.parse_memory_info();

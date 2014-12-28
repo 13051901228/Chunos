@@ -37,8 +37,9 @@ struct soc_desc {
 struct soc_platform {
 	u16 platform_id;
 	u32 (*system_clk_init)(void);
-	int (*system_timer_init)(u32 hz);
+	int (*system_timer_init)(unsigned int hz);
 	struct irq_chip *irq_chip;
+	void (*parse_memory_info)(void);
 	init_call_t *init_action;
 };
 

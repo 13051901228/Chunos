@@ -11,7 +11,7 @@ struct irq_des {
 
 struct irq_chip	{
 	int irq_nr;
-	int (*enable_irq)(int nr, u32 flags);
+	int (*enable_irq)(int nr, int flags);
 	int (*get_irq_nr)(void);
 	int (*disable_irq)(int nr);
 	int (*clean_irq_pending)(int nr);

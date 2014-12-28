@@ -18,3 +18,5 @@
 
 #define SYSTEM_IDT_BASE			(KERNEL_GDT_BASE + SYSTEM_GDT_SIZE)
 #define SYSTEM_IDT_SIZE			0x1000
+
+#endif

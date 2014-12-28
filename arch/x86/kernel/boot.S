@@ -2,40 +2,53 @@
 
 #include "include/x86_config.h"
 
-.macro va_to_pa, reg, va
-	lea \va, \reg
-	sub %ebp, \reg
-.endm
+#define PDE_G		(1 << 8)	/* global page */
+#define PDE_PS		(1 << 7)	/* page size */
+#define PDE_D		(1 << 6)	/* dirty */
+#define PDE_A		(1 << 5)	/* accessed */
+#define PDE_PCD		(1 << 4)	/* cached 0: enable 1: disable */
+#define PDE_PWT		(1 << 3)	/* cache type 0: write-back 1: write-through */
+#define PDE_US		(1 << 2)	/* user/supvisor (0 is super) */
+#define PDE_RW		(1 << 1)	/* read write */
+#define PDE_P		(1 << 0)	/* present */
 
-.macro build_pde_entry, reg_t, reg_pa
+.macro va_to_pa, reg
+	sub %ebp, \reg
 .endm
 
 .global _start
 _start:
-	cli
+	cli				# disable interrupt
+
+	mov %cr0, %ebx			# disable cache
+	btr $30, %ebx
+	mov %ebx, %cr0
 
 	lgdt gdt_table			# setup new gdt for kernel
 
-	mov $0x02, %ax			# load ds
+	mov $0x08, %ax
+	mov %ax, %cs
+
+	mov $0x10, %ax			# load ds
 	mov %ax, %ds
 
-	mov $0x03, %ax			# load ss
+	mov $0x18, %ax			# load ss
 	mov %ax, %ss
 
-	mov $0x04, %ax			# load es
+	mov $0x20, %ax			# load es
 	mov %ax, %es
 
-	mov $0x05, %ax			# load fs
+	mov $0x28, %ax			# load fs
 	mov %ax, %fs
 
-	mov $0x06, %ax			# load gs
+	mov $0x30, %ax			# load gs
 	mov %ax, %gs
 
 	mov %cr0, %ebx			# ensure the code is in protect mode
 	bts $0, %eax
 	mov %eax, %cr0
 
-	jmp $0x01:reset			# load new cs and goto reset
+	jmp %cs:reset			# load new cs and goto reset
 	
 	.align 4
 
@@ -59,7 +72,7 @@ reset:
 	mov $0x1000a000, %eax		# temp code, bootloader need to tell the physical start address of kernel
 
 	lea _start, %ebp
-	sub %ebp, %ebp			# ebp is the pv offset before the gdt is loaded
+	sub %eax, %ebp			# ebp is the pv offset before the gdt is loaded
 
 	lea pv_offset, %ecx		# store the pv offset value to the memroy
 	sub %ebp, %ecx
@@ -71,7 +84,8 @@ reset:
 	sub %ebp, %edx
 	mov %ecx, (%edx)
 
-	va_to_pa ecx, soc_desc		# fill the soc information
+	lea soc_desc, %ecx
+	va_to_pa %ecx			# fill the soc information
 	mov $0x8086, %edx
 	mov $0x01, %esi
 	mov $0x02, %edi
@@ -84,58 +98,83 @@ reset:
 	cmp $0xa000, %eax
 	jne loop
 
-	va_to_pa %esi, kernel_virtual_start  # store the kernel_virtual base address
+	lea kernel_virtual_start, %esi
+	va_to_pa %esi			# store the kernel_virtual base address
 	lea _start, %edx
 	sub $0xa000, %edx
 	mov %edx, (%esi)
 
 clear_bss:
-	va_to_pa %eax, bss_start
-	va_to_pa %ecx, bss_end
+	lea bss_start, %eax
+	lea bss_end, %ecx
+	va_to_pa %eax
+	va_to_pa %ecx
 	mov $0, %edx
 1:
 	cmp %eax, %ecx
-	jbe end_clear_bss
+	jbe set_boot_pde
 	mov %edx, %eax
 	add $4, %eax
 	jmp 1b
-end_clear_bss:
 
 set_boot_pde:
-	va_to_pa %eax, $KERNEL_PDE_BASE_ADDRESS	# eax : pde table base address
-	va_to_pa %ebx, $kernel_phy_start
+	mov $KERNEL_PDE_BASE, %eax
+	lea kernel_phy_start, %ebx
+	va_to_pa %eax				# eax : pde table base address
+	va_to_pa %ebx
 	mov (%ebx), %ebx			# ebx : the physic base address of the kernel
-	va_to_pa %ecx, $kernel_virtual_start	# ecx : the virtual base address of the kernel
+	lea kernel_virtual_start, %ecx
+	va_to_pa %ecx				# ecx : the virtual base address of the kernel
+	mov (%ecx), %ecx
 	mov $12, %edx				# edx : size to maped
 
-	and $(0x3fffff), %ebx			# physic address needed 4m aligin
-	and $(0x3fffff), %ecx			# virtual address need to be 4m aligin
-	lsr $(22), %ecx
-	lsl $(2), %ecx
+	and $(0xffc00000), %ebx			# physic address needed 4m aligin
+	and $(0xffc00000), %ecx			# virtual address need to be 4m aligin
+	shr $(22), %ecx
+	shl $(2), %ecx
 	add %ecx, %eax
+2:
+	cmp $0, %edx
+	jbe copy_gdt
 
-	cmp %edx, $0
-	jbe end_set_boot_pde
-	build_pde_entry, %esi, %ebx
+	mov %ebx, %esi
+	and $0xffc00000, %esi
+	or $(PDE_PS | PDE_RW | PDE_P), %esi	# 4M PDE, r/w write-back cache enable
+
 	mov %esi, (%eax)
 	add $4, (%eax)
 	sub $4, (%edx)
-end_set_boot_pde:
-
-	mov $KERNEL_STACK_BASE, %esp		# setup stack for kernel
+	add $0x400000, %ebx
+	jmp 2b
 
 copy_gdt:
-	lea gtd_table, %eax
-	lea gtd_table_end, %ecx
+	lea gdt_table, %eax
+	lea gdt_table_end, %ecx
 	sub %eax, %ecx
 	shl $2, %ecx
-	va_to_pa %esi, gdt_table
-	va_to_pa %edi, $SYSTEM_GDT_BASE
+	lea gdt_table, %esi
+	mov $SYSTEM_GDT_BASE, %edi
+	va_to_pa %esi
+	va_to_pa %edi
 	rep movsd
 
+set_kernel_stack:
+	mov $KERNEL_STACK_BASE, %esp		# setup stack for kernel
+
 set_pde_base:
-	va_to_pa %eax, $KERNEL_PDE_BASE_ADDRESS	# set paging base address
+	mov $KERNEL_PDE_BASE, %eax
+	va_to_pa %eax				# set paging base address
 	mov %eax, %cr3				
+
+pse_enable:					# if use 4M PDE need to enable pse
+	mov %cr4, %eax
+	bts $4, %eax
+	mov %eax, %cr4
+
+enable_cache:
+	mov %cr0, %eax
+	bts $30, %eax
+	mov %eax, %cr0
 
 enable_paging:
 	mov %cr0, %eax				# enable paging
@@ -143,9 +182,9 @@ enable_paging:
 	mov %eax, %cr0
 
 goto_main:
-	va_to_pa %eax, __main			# goto main
+	lea __main, %eax
 	mov (%eax), %eax
-	jmp eax
+	jmp %eax
 
 loop:
 	jmp loop

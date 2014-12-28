@@ -1,0 +1,1 @@
+#define UART_USIF_BASE	0

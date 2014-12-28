@@ -8,6 +8,7 @@
 #include <os/string.h>
 #include <os/panic.h>
 #include <asm/asm_sched.h>
+#include <os/task.h>
 
 void arch_disable_irqs(void)
 {
@@ -81,6 +82,7 @@ int arch_irq_init(void)
 
 int arch_init(void)
 {
+	/* setup idt and other */
 	return 0;
 }
 

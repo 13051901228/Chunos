@@ -1,7 +1,7 @@
 ENTRY(_start)
 SECTIONS
 {
-	. = 0x8000a000;
+	. = 0xa000a000;
 
 	__code_start = .;
 	.text : 
