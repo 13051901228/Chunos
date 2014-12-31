@@ -18,38 +18,17 @@
 
 .global _start
 _start:
-	cli				# disable interrupt
+	cli
+	cld
+	mov $0x1000a000, %eax		# temp code, bootloader need to tell the physical start address of kernel
+	jmp reset
 
-	mov %cr0, %ebx			# disable cache
-	btr $30, %ebx
-	mov %ebx, %cr0
+	.align 4
 
-	lgdt gdt_table			# setup new gdt for kernel
+.global gdt_table_ptr
+gdt_table_ptr:	.word 512
+		.long SYSTEM_GDT_BASE
 
-	mov $0x08, %ax
-	mov %ax, %cs
-
-	mov $0x10, %ax			# load ds
-	mov %ax, %ds
-
-	mov $0x18, %ax			# load ss
-	mov %ax, %ss
-
-	mov $0x20, %ax			# load es
-	mov %ax, %es
-
-	mov $0x28, %ax			# load fs
-	mov %ax, %fs
-
-	mov $0x30, %ax			# load gs
-	mov %ax, %gs
-
-	mov %cr0, %ebx			# ensure the code is in protect mode
-	bts $0, %eax
-	mov %eax, %cr0
-
-	jmp %cs:reset			# load new cs and goto reset
-	
 	.align 4
 
 .global pv_offset
@@ -68,22 +47,39 @@ soc_desc:
 	.short		0	
 
 	.align 4
-reset:
-	mov $0x1000a000, %eax		# temp code, bootloader need to tell the physical start address of kernel
 
+reset:
+disable_cache:
+	mov %cr0, %ebx			# disable cache
+	btr $30, %ebx
+	mov %ebx, %cr0
+
+disable_paging:
+	mov %cr0, %ebx
+	btr $31, %ebx
+	mov %ebx, %cr0
+
+store_pv_offset:
 	lea _start, %ebp
 	sub %eax, %ebp			# ebp is the pv offset before the gdt is loaded
-
 	lea pv_offset, %ecx		# store the pv offset value to the memroy
 	sub %ebp, %ecx
 	mov %ebp, (%ecx)
 
-	mov %eax, %ecx
-	sub $0xa000, %ecx
-	lea kernel_phy_start, %edx	# store the physic start address of the kernel
-	sub %ebp, %edx
-	mov %ecx, (%edx)
+check_phsyic_start_address:
+	mov %eax, %ebx
+	mov $0xfffff, %ecx		# start address is aligin with specfic addr
+	and %ecx, %ebx
+	cmp $0xa000, %ebx
+	jne loop
 
+store_phy_start_address:
+	lea kernel_phy_start, %ebx	# store the physic base address of the kernel
+	va_to_pa %ebx
+	sub $0xa000, %eax
+	mov %eax, (%ebx)
+
+fill_soc_information:			# done by bootloader
 	lea soc_desc, %ecx
 	va_to_pa %ecx			# fill the soc information
 	mov $0x8086, %edx
@@ -93,11 +89,7 @@ reset:
 	movl %esi, 2(%ecx)
 	movl %edi, 4(%ecx)
 
-	mov $0xfffff, %ecx		# start address is aligin with specfic addr
-	and %ecx, %eax
-	cmp $0xa000, %eax
-	jne loop
-
+store_virtual_start_address:
 	lea kernel_virtual_start, %esi
 	va_to_pa %esi			# store the kernel_virtual base address
 	lea _start, %edx
@@ -109,20 +101,39 @@ clear_bss:
 	lea bss_end, %ecx
 	va_to_pa %eax
 	va_to_pa %ecx
+	mov (%eax), %eax
+	mov (%ecx), %ecx
+	va_to_pa %eax
+	va_to_pa %ecx
 	mov $0, %edx
 1:
 	cmp %eax, %ecx
-	jbe set_boot_pde
-	mov %edx, %eax
+	jbe clean_pde_table
+	mov %edx, (%eax)
 	add $4, %eax
 	jmp 1b
 
-set_boot_pde:
+
+clean_pde_table:
+	mov $KERNEL_PDE_BASE, %eax
+	va_to_pa %eax
+	mov $0, %ebx
+	mov $KERNEL_PDE_SIZE, %ecx
+	add %eax, %ecx
+2:
+	cmp %eax, %ecx
+	jbe set_boot_pde_1
+	mov %ebx, (%eax)
+	add $4, %eax
+	jmp 2b
+
+set_boot_pde_1:					# 0xa0000000 - 0x10000000
 	mov $KERNEL_PDE_BASE, %eax
 	lea kernel_phy_start, %ebx
 	va_to_pa %eax				# eax : pde table base address
 	va_to_pa %ebx
 	mov (%ebx), %ebx			# ebx : the physic base address of the kernel
+	mov %ebx, %edx
 	lea kernel_virtual_start, %ecx
 	va_to_pa %ecx				# ecx : the virtual base address of the kernel
 	mov (%ecx), %ecx
@@ -133,25 +144,64 @@ set_boot_pde:
 	shr $(22), %ecx
 	shl $(2), %ecx
 	add %ecx, %eax
-2:
+3:
 	cmp $0, %edx
-	jbe copy_gdt
+	jbe set_boot_pde_2
 
 	mov %ebx, %esi
-	and $0xffc00000, %esi
 	or $(PDE_PS | PDE_RW | PDE_P), %esi	# 4M PDE, r/w write-back cache enable
 
 	mov %esi, (%eax)
-	add $4, (%eax)
-	sub $4, (%edx)
+	add $4, %eax
+	sub $4, %edx
 	add $0x400000, %ebx
-	jmp 2b
+	jmp 3b
+
+set_boot_pde_2:					# 0x10000000 - 0x10000000
+	mov $KERNEL_PDE_BASE, %eax
+	lea kernel_phy_start, %ebx
+	va_to_pa %eax				# eax : pde table base address
+	va_to_pa %ebx
+	mov (%ebx), %ebx			# ebx : the physic base address of the kernel
+	mov %ebx, %ecx				# ecx : map phsyic to physic
+	mov $12, %edx				# edx : size to maped
+
+	and $(0xffc00000), %ebx			# physic address needed 4m aligin
+	and $(0xffc00000), %ecx			# virtual address need to be 4m aligin
+	shr $(22), %ecx
+	shl $(2), %ecx
+	add %ecx, %eax
+4:
+	cmp $0, %edx
+	jbe clean_gdt_table
+
+	mov %ebx, %esi
+	or $(PDE_PS | PDE_RW | PDE_P), %esi	# 4M PDE, r/w write-back cache enable
+
+	mov %esi, (%eax)
+	add $4, %eax
+	sub $4, %edx
+	add $0x400000, %ebx
+	jmp 4b
+
+clean_gdt_table:
+	mov $SYSTEM_GDT_BASE, %eax
+	va_to_pa %eax
+	mov $SYSTEM_GDT_SIZE, %ecx
+	mov $0, %ebx
+	add %eax, %ecx
+5:
+	cmp %eax, %ecx
+	jbe copy_gdt
+	mov %ebx, (%eax)
+	add $4, %eax
+	jmp 5b
 
 copy_gdt:
 	lea gdt_table, %eax
 	lea gdt_table_end, %ecx
 	sub %eax, %ecx
-	shl $2, %ecx
+	shr $2, %ecx
 	lea gdt_table, %esi
 	mov $SYSTEM_GDT_BASE, %edi
 	va_to_pa %esi
@@ -165,6 +215,31 @@ set_pde_base:
 	mov $KERNEL_PDE_BASE, %eax
 	va_to_pa %eax				# set paging base address
 	mov %eax, %cr3				
+
+load_new_gdt:
+	lea gdt_table_ptr, %eax
+	va_to_pa %eax
+	mov %eax, %ecx
+	add $2, %ecx
+	mov (%ecx), %ebx
+	va_to_pa %ebx
+	mov %ebx, (%ecx)
+	lgdt (%eax)				# setup new gdt for kernel
+
+	movw $0x10, %ax			# load ds
+	movw %ax, %ds
+
+	movw $0x18, %ax			# load ss
+	movw %ax, %ss
+
+	movw $0x20, %ax			# load es
+	movw %ax, %es
+
+	movw $0x28, %ax			# load fs
+	movw %ax, %fs
+
+	movw $0x30, %ax			# load gs
+	movw %ax, %gs
 
 pse_enable:					# if use 4M PDE need to enable pse
 	mov %cr4, %eax
@@ -182,28 +257,23 @@ enable_paging:
 	mov %eax, %cr0
 
 goto_main:
-	lea __main, %eax
-	mov (%eax), %eax
-	jmp %eax
+	ljmp $0x8, $main
 
 loop:
 	jmp loop
-
-__main:
-	.long main
 
 	.align 8
 gdt_table:				# base 0 limit 0xfffff
 	.quad 0x0			# first entry is NULL
 	.quad 0x00cf9a000000ffff	# kernel cs
 	.quad 0x00cf92000000ffff	# kernel ds expand-up
-	.quad 0x00cf96000000ffff	# kernel ss expand-down
+	.quad 0x00cf92000000ffff	# kernel ss expand-up
 	.quad 0x00cf92000000ffff	# kernel es expand-up
 	.quad 0x00cf92000000ffff	# kernel fs expand-up
 	.quad 0x00cf92000000ffff	# kernel gs expand-up
 	.quad 0x00cffa000000ffff	# user cs
 	.quad 0x00cff2000000ffff	# user ds expand-up
-	.quad 0x00cff6000000ffff	# user ss expand-down
+	.quad 0x00cff6000000ffff	# user ss expand-up
 	.quad 0x00cff2000000ffff	# user es expand-up
 	.quad 0x00cff2000000ffff	# user fs expand-up
 	.quad 0x00cff2000000ffff	# user gs expand-up
