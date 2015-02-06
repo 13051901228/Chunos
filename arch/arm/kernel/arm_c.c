@@ -309,27 +309,17 @@ void arch_init_pt_regs(pt_regs *regs, void *fn, void *arg)
 	regs->spsr = 15;
 }
 
-int arch_set_up_task_stack(struct task_struct *task, pt_regs *regs)
+int arch_set_up_task_stack(unsigned long sp_base, pt_regs *regs)
 {
-	u32 *stack_base;
+	unsigned long *stack_base = (unsigned long *)sp_base;
 
-	/*
-	 * in arm, stack is grow from up to down,so we 
-	 * adjust it;
-	 */
-	if (task->stack_base == NULL) {
-		kernel_error("task kernel stack invailed\n");
-		return -EFAULT;
-	}
-	task->stack_base = task->stack_origin;
-	task->stack_base += KERNEL_STACK_SIZE;
-	stack_base = task->stack_base;
+	/* arm's stack is up to down */
+	stack_base = (unsigned long *)(sp_base + KERNEL_STACK_SIZE);
 	
 	/*
 	 * when switch task, the context will follow
 	 * below stucture.
 	 */
-	kernel_debug("regs->pc 0x%x regs->sp 0x%x\n", regs->pc, regs->sp);
 	*(--stack_base) = regs->pc;
 	*(--stack_base) = regs->cpsr;
 	*(--stack_base) = regs->sp;
@@ -349,19 +339,17 @@ int arch_set_up_task_stack(struct task_struct *task, pt_regs *regs)
 	*(--stack_base) = regs->r1;
 	*(--stack_base) = regs->r0;
 
-	task->stack_base = (void *)stack_base;
-
-	return 0;
+	return (unsigned long )stack_base;
 }
 
 void data_abort_handler(unsigned long sp)
 {
-	panic("Data aboart exception", sp);
+	_panic("Data aboart exception", sp);
 }
 
 void prefetch_abort_handler(unsigned long sp)
 {
-	panic("Prefetch abort exception", sp);
+	_panic("Prefetch abort exception", sp);
 }
 
 void arch_set_mode_stack(u32 base, u32 mode)

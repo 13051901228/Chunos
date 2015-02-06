@@ -61,6 +61,7 @@ int signal_handler(pt_regs *regs, unsigned long user_sp)
 
 void copy_sigreturn_code(struct task_struct *task)
 {
+#if 0
 	struct list_head *list = &task->mm_struct.elf_image_list;
 	char sigreturn_start[16];
 	char sigreturn_end[16];
@@ -71,6 +72,7 @@ void copy_sigreturn_code(struct task_struct *task)
 	load_base += PROCESS_SIGRETURN_OFFSET;
 
 	memcpy(load_base, sigreturn_start, sigreturn_end - sigreturn_start);
+#endif
 }
 
 static sighandler_t sys_signal(int signum, sighandler_t handler)
@@ -208,7 +210,6 @@ DEFINE_SYSCALL(kill, __NR_kill, (void *)sys_kill);
 int init_signal_struct(struct task_struct *task)
 {
 	int i;
-
 	struct signal_struct *signal = &task->signal;
 
 	signal->pending = NULL;

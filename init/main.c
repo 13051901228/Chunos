@@ -25,6 +25,7 @@ extern int soc_late_init(void);
 extern int soc_early_init(void);
 extern int arch_init(void);
 extern int log_buffer_init(void);
+extern int mmu_init(void);
 
 extern unsigned long init_call_start;
 extern unsigned long init_call_end;
@@ -46,6 +47,7 @@ int main(void)
 	 * kernel mmu page table build
 	 */
 	disable_irqs();
+	arch_early_init();
 	log_buffer_init();
 	console_early_init();
 	soc_early_init();
@@ -55,6 +57,7 @@ int main(void)
 	 * console again to use the uart0,or we can implement
 	 * a more stronger printk system if needed.
 	 */
+	mmu_init();
 	mm_init();
 	console_late_init();
 	slab_init();

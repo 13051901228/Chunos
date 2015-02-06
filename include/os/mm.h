@@ -11,19 +11,16 @@
 
 struct platform_info;
 
-#define NORMAL_MEM		0
-#define DMA_MEM			1
-#define RES_MEM			2
-#define IO_MEM			3
-#define MM_ZONE_MASK		0x3
-#define UNKNOW_MEM		4
-
 typedef enum __mm_zone_t {
+#define NORMAL_MEM		0
 	MM_ZONE_NORMAL = NORMAL_MEM,
+#define DMA_MEM			1
 	MM_ZONE_DMA = DMA_MEM,
+#define RES_MEM			2
 	MM_ZONE_RES = RES_MEM,
-	MM_ZONE_IO = IO_MEM,
-	MM_ZONE_UNKNOW,
+#define MM_ZONE_MASK		0x3
+#define UNKNOWN_MEM		3
+	MM_ZONE_UNKNOWN = UNKNOWN_MEM,
 } mm_zone_t;
 
 /*
@@ -32,7 +29,6 @@ typedef enum __mm_zone_t {
 #define __GFP_KERNEL		0x00000001
 #define __GFP_DMA		0x00000002
 #define __GFP_RES		0x00000004
-#define __GFP_IO		0x00000008
 
 #define GFP_ZONE_ID_MASK	0x0000000f
 

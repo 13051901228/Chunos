@@ -5,6 +5,8 @@
 #include <os/filesystem.h>
 #include <sys/stat.h>
 
+struct task_struct;
+
 enum {
 	DT_UNKNOWN = 0,
 #define DT_UNKNOWN	DT_UNKNOWN
@@ -97,9 +99,8 @@ struct file_desc {
 	int open_nr;
 	int fd;
 	struct file *file_open[FILE_OPENS];
-
 	struct fnode *cdir;
-	char *cdir_name;
+	char cdir_name[256];
 };
 
 struct file_desc *alloc_and_init_file_desc(struct file_desc *p);

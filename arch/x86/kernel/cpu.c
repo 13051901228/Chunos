@@ -10,6 +10,8 @@
 #include <asm/asm_sched.h>
 #include <os/task.h>
 
+extern void x86_idt_init(void);
+
 void arch_disable_irqs(void)
 {
 	asm ("cli\n\t");
@@ -42,7 +44,7 @@ void arch_flush_cache(void)
 
 void inline arch_flush_mmu_tlb(void)
 {
-
+	__asm ("wbinvd");
 }
 
 void arch_enable_irqs(void)
@@ -109,4 +111,9 @@ u32 arch_build_tlb_des(unsigned long pa, u32 attr)
 int uart_puts(char *str)
 {
 	return 0;
+}
+
+int arch_early_init(void)
+{
+	x86_idt_init();
 }

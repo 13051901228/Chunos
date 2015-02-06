@@ -82,9 +82,9 @@ store_phy_start_address:
 fill_soc_information:			# done by bootloader
 	lea soc_desc, %ecx
 	va_to_pa %ecx			# fill the soc information
-	mov $0x8086, %edx
-	mov $0x01, %esi
-	mov $0x02, %edi
+	mov $0x8087, %edx
+	mov $0x636, %esi
+	mov $0x1, %edi
 	movl %edx, (%ecx)
 	movl %esi, 2(%ecx)
 	movl %edi, 4(%ecx)
@@ -137,7 +137,15 @@ set_boot_pde_1:					# 0xa0000000 - 0x10000000
 	lea kernel_virtual_start, %ecx
 	va_to_pa %ecx				# ecx : the virtual base address of the kernel
 	mov (%ecx), %ecx
-	mov $12, %edx				# edx : size to maped
+
+	lea code_end, %edx
+	va_to_pa %edx
+	mov (%edx), %edx
+	sub $(0xa0000000), %edx			# size to map
+	add $(0x3fffff), %edx
+	and $(~0x3fffff), %edx
+	shr $(20), %edx
+	mov %edx, %edi
 
 	and $(0xffc00000), %ebx			# physic address needed 4m aligin
 	and $(0xffc00000), %ecx			# virtual address need to be 4m aligin
@@ -164,7 +172,32 @@ set_boot_pde_2:					# 0x10000000 - 0x10000000
 	va_to_pa %ebx
 	mov (%ebx), %ebx			# ebx : the physic base address of the kernel
 	mov %ebx, %ecx				# ecx : map phsyic to physic
-	mov $12, %edx				# edx : size to maped
+	mov %edi, %edx				# edx : size to maped
+
+	and $(0xffc00000), %ebx			# physic address needed 4m aligin
+	and $(0xffc00000), %ecx			# virtual address need to be 4m aligin
+	shr $(22), %ecx
+	shl $(2), %ecx
+	add %ecx, %eax
+4:
+	cmp $0, %edx
+	jbe set_uart_pde
+
+	mov %ebx, %esi
+	or $(PDE_PS | PDE_RW | PDE_P), %esi	# 4M PDE, r/w write-back cache disable
+
+	mov %esi, (%eax)
+	add $4, %eax
+	sub $4, %edx
+	add $0x400000, %ebx
+	jmp 4b
+
+set_uart_pde:
+	mov $KERNEL_PDE_BASE, %eax
+	va_to_pa %eax				# eax : pde table base address
+	mov $0xe1100000, %ebx
+	mov %ebx, %ecx				# ecx : map phsyic to physic
+	mov $0x4, %edx				# edx : size to maped
 
 	and $(0xffc00000), %ebx			# physic address needed 4m aligin
 	and $(0xffc00000), %ecx			# virtual address need to be 4m aligin
@@ -176,7 +209,7 @@ set_boot_pde_2:					# 0x10000000 - 0x10000000
 	jbe clean_gdt_table
 
 	mov %ebx, %esi
-	or $(PDE_PS | PDE_RW | PDE_P), %esi	# 4M PDE, r/w write-back cache enable
+	or $(PDE_PS | PDE_RW | PDE_P | PDE_PCD), %esi	# 4M PDE, r/w write-back cache enable
 
 	mov %esi, (%eax)
 	add $4, %eax
@@ -209,7 +242,7 @@ copy_gdt:
 	rep movsd
 
 set_kernel_stack:
-	mov $KERNEL_STACK_BASE, %esp		# setup stack for kernel
+	mov $X86_KERNEL_STACK_BASE, %esp		# setup stack for kernel
 
 set_pde_base:
 	mov $KERNEL_PDE_BASE, %eax

@@ -6,7 +6,6 @@
 void tq2440_parse_memory_region(void)
 {
 	register_memory_region(0x30000000, 64 * 1024 * 1024, NORMAL_MEM);
-	register_memory_region(0x48000000, 0x5b000020-0x48000000, IO_MEM);
 }
 
 static struct soc_board tq2440 = {

@@ -3,7 +3,7 @@
 
 typedef enum _arch_id {
 	ARCH_ARM,
-	ARCH_X86,
+	ARCH_X86 = 0x8086,
 	ARCH_UNKNOWN
 }arch_id;
 

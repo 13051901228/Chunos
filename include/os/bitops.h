@@ -33,5 +33,8 @@ static int inline read_bit(u32 *bit_map, int n)
 }
 
 void init_bitmap(u32 bitmap[], int n);
+int bitmap_find_free_base(u32 *map, int start,
+		int value, int map_nr, int count);
+
 
 #endif

@@ -179,7 +179,7 @@ char *strchr(char *src, char ch)
 	return (char *)src;
 }
 
-#if 1
+#if 0
 int memcpy(void *target, void *source, int size)
 {
 	char *t = (char *)target;
@@ -196,6 +196,7 @@ int memcpy(void *target, void *source, int size)
 }
 #endif
 
+#if 0
 void memset(char *base, char ch, int size)
 {
 	int i;
@@ -204,3 +205,4 @@ void memset(char *base, char ch, int size)
 		*(base + i) = ch;
 	}
 }
+#endif

@@ -10,26 +10,14 @@
 #include <os/init.h>
 #include <os/irq.h>
 
-static unsigned long sofia_uart_base;
-
-int sofia_init_uart_usif(u32 baud)
-{
-
-}
-
 int soc_console_early_init(u32 baud)
 {
-	sofia_uart_base = 0x0;
 	sofia_init_uart_usif(baud);
 	return 0;
 }
 
 int soc_console_late_init(u32 baud)
 {
-	sofia_uart_base = request_io_mem(UART_USIF_BASE);
-	if (!sofia_uart_base)
-		return -ENOMEM;
-
 	return 0;
 }
 
@@ -47,13 +35,20 @@ int sofia_timer_init(unsigned int hz)
 	return 0;
 }
 
+void sofia_parse_memory_info(void)
+{
+}
+
 extern struct irq_chip ioapic;
+extern struct mmu x86_mmu;
 
 static __init_data struct soc_platform sofia = {
-	.platform_id		= 0,
+	.platform_id		= 0x636,
 	.system_clk_init	= sofia_clk_init,
 	.system_timer_init	= sofia_timer_init,
 	.irq_chip		= &ioapic,
+	.mmu			= &x86_mmu,
 	.init_action		= sofia_init_action,
+	.parse_memory_info	= sofia_parse_memory_info,
 };
 DEFINE_SOC_PLATFORM(sofia);

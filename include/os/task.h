@@ -9,17 +9,19 @@
 #include <os/mm.h>
 #include <os/mirros.h>
 #include <sys/sig.h>
+#include <os/task_mm.h>
 
 #define KERNEL_STACK_SIZE	(SIZE_4K)
 #define PROCESS_STACK_SIZE	(4 * PAGE_SIZE)		/* 16k stack size */
 #define PROCESS_IMAGE_SIZE	(256 * PAGE_SIZE)	/* 1M stack size */
 
-#define PROCESS_NAME_SIZE	16
+#define PROCESS_NAME_SIZE	255
 
 #define PROCESS_TYPE_KERNEL	0x00000001
 #define PROCESS_TYPE_USER	0x00000002
 
 #define PROCESS_FLAG_FORK	0x00000010
+#define PROCESS_FLAG_EXEC	0x00000020
 
 #define PROCESS_MAP_STACK	0
 #define PROCESS_MAP_ELF		1
@@ -34,37 +36,6 @@ typedef enum _state_t {
 	PROCESS_STATE_STOP,
 	PROCESS_STATE_UNKNOWN
 } state_t;
-
-/*
- * elf_size:the size of all elf section. at first we will
- * allocate elf_size to load all section of elf file
- * stack_size:max 4m, when fork only allocate 16k
- * elf_curr:current page table entry in list
- * stack_cur:current page table entry in list
- * stack_list:each page table of stack table will be mounted
- * on this list
- * elf_list:each page table of elf image will be mounted
- * on this list
- * elf_stack_list:memory allocated for task stack
- * elf_image_list:memory allocated for task image
- */
-struct mm_struct {
-	int elf_size;
-	int stack_size;
-	struct list_head *stack_curr;		/* for page table */
-	struct list_head *elf_curr;		/* for page table */
-	struct list_head stack_list;		/* for page table */
-	struct list_head elf_list;		/* for page table */
-	struct list_head elf_stack_list;
-	struct list_head elf_image_list;
-
-	/* for mmap */
-	struct list_head mmap_page_list;
-	struct list_head mmap_mem_list;
-	DECLARE_BITMAP(mmap, PROCESS_USER_MMAP_SIZE >> PAGE_SHIFT);
-	int free_pos;
-	int mmap_nr;
-};
 
 /*
  * task_struct:represent a process in the kernel
@@ -84,8 +55,8 @@ struct mm_struct {
  * this list_head will insert to the mutex's waitting list
  */
 struct task_struct {
-	void *stack_base;
-	void *stack_origin;
+	unsigned long stack_base;
+	unsigned long stack_origin;
 
 	char name[PROCESS_NAME_SIZE + 1];
 	u32 flag;
@@ -127,10 +98,21 @@ struct task_struct {
 
 extern pt_regs *arch_get_pt_regs(void);
 
+static inline int task_is_kernel(struct task_struct *task)
+{
+	return (!!(task->flag & PROCESS_TYPE_KERNEL));
+}
+
+static inline int task_is_user(struct task_struct *task)
+{
+	return (!!(task->flag & PROCESS_TYPE_USER));
+}
+
 int kthread_run(char *name, int (*fn)(void *arg), void *arg);
 int kernel_exec(char *filename);
 int kill_task(struct task_struct *task);
 int task_kill_self(struct task_struct *task);
+
 static inline pt_regs *get_pt_regs(void)
 {
 	return arch_get_pt_regs();

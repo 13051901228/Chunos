@@ -121,10 +121,10 @@ void register_memory_region(address_t start, size_t size, int attr)
 static void __init_text soc_get_mem_info(struct soc *soc)
 {
 	/* these value must set at lds or boot.S */
-	extern u32 code_start, code_end;
-	extern u32 bss_start, bss_end;
-	u32 kernel_virtual_start, kernel_phy_start;
-	extern u32 init_start, init_end;
+	extern unsigned long code_start, code_end;
+	extern unsigned long bss_start, bss_end;
+	extern unsigned long kernel_virtual_start, kernel_phy_start;
+	extern unsigned long init_start, init_end;
 	struct soc_memory_info *memory_info = get_soc_memory_info();
 
 	kernel_debug("code start 0x%x code_end 0x%x\n", code_start, code_end);
@@ -165,7 +165,7 @@ int __init_text soc_early_init(void)
 
 	ret = find_system_soc(soc);
 	if (ret)
-		panic("Unsupport soc and platform\n", 0);
+		panic("Unsupport soc and platform\n");
 
 	soc_get_mem_info(soc);
 

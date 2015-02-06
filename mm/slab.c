@@ -178,7 +178,7 @@ repet:
 	/* get the slab_header to find the free memory */
 	header = list_entry(list, struct slab_header, slab_list);
 	pg = va_to_page((unsigned long)header);
-
+#if 0
 	/* check whether the page has been released. */
 	if (!page_state(va_to_page_id((unsigned long)header)) ||
 		!(pg->flag & __GFP_SLAB)) {
@@ -188,7 +188,7 @@ repet:
 		remove_slab_from_list(header);
 		goto repet;
 	}
-
+#endif
 	/*
 	 * update the page information delete slab from
 	 * cache list add slab to page list
@@ -212,13 +212,13 @@ static void *get_slab_from_page_free(int size, unsigned long flag)
 	pg = pslab->slab_page_current;
 	if (pg == NULL)
 		return NULL;
-
+#if 0
 	/* If the page has been released, we need a new page */
 	if (!page_state(page_to_page_id(pg))) {
 		pslab->slab_page_current = NULL;
 		return NULL;
 	}
-
+#endif
 	if (new_size > get_page_free_size(pg))
 		return NULL;
 

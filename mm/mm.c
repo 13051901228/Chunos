@@ -4,14 +4,16 @@
 #include <os/mirros.h>
 #include <os/mmu.h>
 #include <os/kernel.h>
+#include <os/panic.h>
+#include "memory_map.h"
 
-#define ZONE_MAX_REGION		4
+#define ZONE_MAX_SECTION	4
 
 /*
  * mm_section represent a memory section in the platform
  * phy_start: phyical start
  * vir_start: the adress of virtual which mapped the this section
- * size: section size
+ * size: section size needed to be 4K align
  * pv_offset: section offset p->v
  * maped: whether this section need to mapped
  */
@@ -19,8 +21,15 @@ struct mm_section {
 	unsigned long phy_start;
 	unsigned long vir_start;
 	unsigned long size;
+	size_t nr_page;
 	long pv_offset;
-	u32 maped : 1;
+	size_t maped_size;
+	u32 bm_end;
+	u32 bm_current;
+	size_t nr_free_pages;
+	size_t free_size;
+	u32 *bitmap;
+	struct page *page_table;
 };
 
 /*
@@ -35,18 +44,15 @@ struct mm_section {
  * bm_end: bit map end position
  */
 struct mm_zone {
-	struct mm_section memory_section[ZONE_MAX_REGION];
+	struct mm_section memory_section[ZONE_MAX_SECTION];
 	int nr_section;
 	struct mutex zone_mutex;
-
-	u32 total_size;
-	u32 free_size;
-	u32 page_num;
-	u32 free_pages;
-
-	u32 bm_start;
-	u32 bm_end;
-	u32 bm_current;
+	size_t maped_size;
+	unsigned long map_base;
+	size_t total_size;
+	size_t free_size;
+	int page_num;
+	int nr_free_pages;
 };
 
 /*
@@ -59,69 +65,37 @@ struct mm_zone {
 struct mm_bank {
 	u32 total_size;	
 	u32 total_page;
-	u32 total_section;
-	struct mm_zone zone[MM_ZONE_UNKNOW];
+	struct mm_zone zone[MM_ZONE_UNKNOWN];
 };
 
-struct mm_bank mm_bank;
-struct mm_bank *p_bank = &mm_bank;
+static struct mm_bank _mm_bank;
+static struct mm_bank *mm_bank = &_mm_bank;
 
-struct page *_page_table;
-u32 *_page_map;
-
-static struct mm_bank *get_memory_bank(void)
-{
-	return p_bank;
-}
-
-static u32 *get_page_map(void)
-{
-	return _page_map;
-}
+#define NR_MAX_SECTIONS		(MM_ZONE_UNKNOWN * ZONE_MAX_SECTION)
+static struct mm_section *section_table[NR_MAX_SECTIONS + 1] = { 0 };
 
 u32 mm_free_page(unsigned long flag)
 {
-	struct mm_bank *bank = get_memory_bank();
 	int i;
 	u32 sum = 0;
 	flag = flag & MM_ZONE_MASK;
 
-	for (i = 0; i < MM_ZONE_UNKNOW; i++) {
+	for (i = 0; i < MM_ZONE_UNKNOWN; i++) {
 		if ((flag & i) == i) {
-			sum += bank->zone[i].free_pages;
+			sum += mm_bank->zone[i].nr_free_pages;
 		}
 	}
 
 	return sum;
 }
 
-static inline void init_memory_section(struct mm_section *section)
+static void init_memory_bank(void)
 {
-	section->phy_start = 0;
-	section->vir_start = 0;
-	section->size = 0;
-	section->pv_offset = 0;
-	section->maped = 0;
-}
+	int i;
 
-static int init_memory_bank(struct mm_bank *bank)
-{
-	int i,j;
-	struct mm_zone *zone;
-
-	bank->total_size = 0;
-	bank->total_page = 0;
-
-	for (i=0; i < MM_ZONE_UNKNOW; i++) {
-		zone = &bank->zone[i];
-		zone->nr_section = 0;
-		init_mutex(&zone->zone_mutex);
-		for (j = 0; j < ZONE_MAX_REGION; j++) {
-			init_memory_section(&zone->memory_section[j]);
-		}
-	}
-
-	return 0;
+	memset((char *)mm_bank, 0, sizeof(struct mm_bank));
+	for (i = 0; i < MM_ZONE_UNKNOWN; i++)
+		init_mutex(&mm_bank->zone[i].zone_mutex);
 }
 
 static u32 insert_region_to_zone(struct memory_region *region,
@@ -130,46 +104,45 @@ static u32 insert_region_to_zone(struct memory_region *region,
 	struct mm_section *section;
 	
 	/* fix me: we must ensure nr_section < max_zone_section */
-	if (zone->nr_section == ZONE_MAX_REGION) {
-		mm_debug("bug: may be you need increase the ZONE_MAX_SECTION\n");
+	if (zone->nr_section == ZONE_MAX_SECTION) {
+		mm_debug("Bug: Zone section is bigger than %d\n",
+				ZONE_MAX_SECTION);
 		return 0;
 	}
 
 	section = &zone->memory_section[zone->nr_section];
 	section->phy_start = region->start;
 	section->size = region->size;
+	section->nr_page = section->size >> PAGE_SHIFT;
+	section->nr_free_pages = section->nr_page;
+
 	zone->nr_section++;
 	zone->total_size += section->size;
 	zone->free_size = zone->total_size;
 	zone->page_num = (zone->total_size) >> PAGE_SHIFT;
-	zone->free_pages = zone->page_num;
+	zone->nr_free_pages = zone->page_num;
 
 	return (section->size);
 }
 
-
-/*
- * some potential issue eixst in this function
- * maybe we can fix it later.
- */
-static int analyse_soc_memory_info(struct soc_memory_info *info, struct mm_bank *bank)
+int get_memory_sections(void)
 {
-	int i, j;
-	int min;
+	int i, j, min;
+	struct soc_memory_info *info = get_soc_memory_info();
 	struct memory_region *region = info->region;
-	struct mm_section tmp;
 	struct memory_region rtmp;
-	struct mm_section *pr;
 	struct mm_zone *zone;
-	int dma_split = 0;
-	u32 size;
+	size_t size;
+
+	if (!info->region_nr)
+		panic("No any memory found\n");
 
 	/* sort the memory region array from min to max */
 	for (i = 0; i < info->region_nr; i++) {
 		min = i;
 
-		for (j = i+1; j < info->region_nr; j++) {
-			if (region[min].start > region[j].start)
+		for (j = i + 1; j < info->region_nr; j++) {
+			if ((region[min].start) > (region[j].start))
 				min = j;
 		}
 
@@ -187,11 +160,90 @@ static int analyse_soc_memory_info(struct soc_memory_info *info, struct mm_bank 
 	 */
 	for (i = 0; i < info->region_nr; i++) {
 		region = &info->region[i]; 
-		zone = &bank->zone[region->attr];
-		size = insert_region_to_zone(region,zone);
-		if ((region->attr != IO_MEM) && (region->attr != UNKNOW_MEM))
-			bank->total_size += size;
+		if (region->attr >= UNKNOWN_MEM)
+			continue;
+
+		zone = &mm_bank->zone[region->attr];
+		size = insert_region_to_zone(region, zone);
+		if (region->attr != UNKNOWN_MEM) {
+			mm_bank->total_size += size;
+			mm_bank->total_page =
+				(mm_bank->total_size) >> PAGE_SHIFT;
+		}
 	}
+
+	return 0;
+}
+
+static void alloc_dma_section(void)
+{
+	int i, j = 0;
+	struct mm_section tmp;
+	struct mm_section *pr;
+	struct mm_zone *zone;
+	struct memory_region rtmp;
+	size_t size;
+
+	zone = &mm_bank->zone[MM_ZONE_NORMAL];
+	size = align((zone->total_size >> 4), PAGE_SIZE);
+
+	/* choose the section which has the max size */
+	pr = &zone->memory_section[0];
+	for (i = 1; i < zone->nr_section; i++) {
+		if(zone->memory_section[i].size > pr->size)
+			pr = &zone->memory_section[i];
+	}
+
+	if (zone->nr_section > 1) {
+		tmp = *pr;
+		for (i = 0; i < zone->nr_section; i++) {
+			if ((zone->memory_section[i].size < pr->size) &&
+			    zone->memory_section[i].size >= size &&
+			    zone->memory_section[i].size < tmp.size) {
+				tmp = zone->memory_section[i];
+				j = i;
+			}
+		}
+
+		/* fix me: when the section is boot section */
+		if (tmp.size != pr->size)
+			pr = &zone->memory_section[j];	
+	}
+
+	/*
+	 * fix me, we must ensure that the section with max size
+	 * must have enough size to split memory for DMA.
+	 */
+	pr->size -= size;
+	pr->nr_page -= size >> PAGE_SHIFT;
+	pr->nr_free_pages -= size >> PAGE_SHIFT;
+
+	/*
+	 * if the size of this section 0 after split to
+	 * dma need to increase the section number of
+	 * this zone
+	 */
+	if (!pr->size)	/* || pr->size < n */
+		zone->nr_section--;
+
+	/* get a new mm_region for dma */
+	rtmp.start = tmp.phy_start + tmp.size - size;
+	rtmp.size = size;
+	rtmp.attr = DMA_MEM;
+
+	zone->total_size -= rtmp.size;
+	zone->free_size -= rtmp.size;
+	zone->page_num -= (rtmp.size) >> PAGE_SHIFT;
+	zone->nr_free_pages = zone->page_num;
+
+	mm_debug("no dma zone,auto allocated 0x%x \
+			Byte size dma zone\n",rtmp.size);
+	insert_region_to_zone(&rtmp, &mm_bank->zone[MM_ZONE_DMA]);
+}
+
+static int analyse_soc_memory_info(void)
+{
+	get_memory_sections();
 
 	/*
 	 * if user did not assign the dma zone,we must alloce
@@ -199,148 +251,53 @@ static int analyse_soc_memory_info(struct soc_memory_info *info, struct mm_bank 
 	 * if there is a section which size is equal or a little
 	 * bigger than dma size zone we will use it as dma zone
 	 */
-	zone = &bank->zone[MM_ZONE_DMA];
-	if (zone->nr_section == 0) {
-		zone = &bank->zone[MM_ZONE_NORMAL];
-		size = zone->total_size;
-		size = (size >> 4) ;
-		size = baligin(size, SIZE_1M);
-
-		pr = &zone->memory_section[0];
-		for (i = 0; i < zone->nr_section; i++) {
-			if(zone->memory_section[i].size > pr->size)
-				pr = &zone->memory_section[i];
-		}
-
-		if (zone->nr_section > 1) {
-			tmp = *pr;
-			for (i = 0; i < zone->nr_section; i++) {
-				if ((zone->memory_section[i].size < pr->size) &&
-				    zone->memory_section[i].size >= size &&
-				    zone->memory_section[i].size < tmp.size) {
-					tmp = zone->memory_section[i];
-					j = i;
-				}
-			}
-			
-			if (tmp.size != pr->size) {
-				if ((tmp.size - size) <= ((zone->total_size) >> 5)) {
-					pr = &zone->memory_section[j];	
-					pr->size = 0;
-					pr->phy_start = 0;
-					pr->pv_offset = 0;
-					zone->nr_section--;
-					
-					rtmp.start = tmp.phy_start;
-					rtmp.size = tmp.size;
-					rtmp.attr = DMA_MEM;
-
-					goto insert_new_dma;
-				}
-			}
-		}
-
-		/*
-		 * fix me, we must ensure that the section with max size
-		 * must have enough size to split memory for DMA.
-		 */
-		rtmp.start = (pr->phy_start + pr->size) -size;
-		rtmp.size = size;
-		rtmp.attr = DMA_MEM;
-		pr->size -= size;
-
-insert_new_dma:
-		zone->total_size -= rtmp.size;
-		zone->free_size -= rtmp.size;
-		zone->page_num -= (rtmp.size) >> PAGE_SHIFT;
-		zone->free_pages = zone->page_num;
-		dma_split = 1;
-
-		mm_debug("no dma zone,auto allocated 0x%x \
-			  Byte size dma zone\n",rtmp.size);
-		insert_region_to_zone(&rtmp, &bank->zone[MM_ZONE_DMA]);
-	}
-
-	/* if dma_section is split then needed be add 1 */
-	bank->total_page = (bank->total_size) >> PAGE_SHIFT;
-	if (dma_split)
-		bank->total_section = info->region_nr + 1;
-	else
-		bank->total_section = info->region_nr;
+	if (!mm_bank->zone[MM_ZONE_DMA].nr_section)
+		alloc_dma_section();
 
 	return 0;
 }
 
-static inline u32 map_section_to_virtual(struct mm_section *section,
-		                         unsigned long map_base)
-{
-	section->vir_start = map_base;
-	section->pv_offset = map_base - section->phy_start;
-	section->maped = 1;
-
-	return section->size;
-}
-
-static u32 map_zone_to_virtual(struct mm_zone *zone, unsigned long map_base)
-{
-	int i;
-	struct mm_section *section;
-	u32 new_base = map_base;
-	u32 size;
-
-	/* if the section has been already maped,skip it */
-	for (i = 0; i < zone->nr_section; i++) {
-		section = &zone->memory_section[i];
-		if (section->size > 0 && (!section->maped)) {
-			size = map_section_to_virtual(section, new_base);
-			new_base += size;
-		}
-	}
-
-	return (new_base - map_base);
-}
-
-int do_map_memory(struct mm_bank *bank)
+int do_map_memory(void)
 {
 	struct mm_zone *zone;
 	unsigned long flag = 0;
 	struct mm_section *section;
-	int i,j;
-	struct soc_memory_info *info = get_soc_memory_info();
+	int i, j;
 	address_t already_map;
+	struct soc_memory_info *info = get_soc_memory_info();
 
 	/* skip the maped memeory in boot stage */
-	already_map = info->code_end - info->kernel_virtual_start;
-	already_map = baligin(already_map, SIZE_1M);
-	for (i = 0; i< MM_ZONE_UNKNOW; i++) {
+	already_map = info->code_end - KERNEL_VIRTUAL_BASE;
+	already_map = align(already_map, PDE_ALIGN_SIZE);
+
+	for (i = 0; i < MM_ZONE_UNKNOWN; i++) {
 		flag = 0;
 		switch (i) {
 			case MM_ZONE_NORMAL:
-				flag |= TLB_ATTR_KERNEL_MEMORY;
+			case MM_ZONE_RES:
+				flag |= PDE_ATTR_KERNEL_MEMORY;
 				break;
 			case MM_ZONE_DMA:
-				flag |= TLB_ATTR_DMA_MEMORY;
-				break;
-			case MM_ZONE_IO:
-				flag |= TLB_ATTR_IO_MEMORY;
+				flag |= PDE_ATTR_DMA_MEMORY;
 				break;
 			default:
-				flag |= TLB_ATTR_KERNEL_MEMORY;
+				kernel_error("Unknown memory zone\n");
+				continue;
 				break;
 		}
 
-		zone = &bank->zone[i];
-		for (j = 0; j< zone->nr_section; j++) {
+		zone = &mm_bank->zone[i];
+		for (j = 0; j < zone->nr_section; j++) {
 			section = &zone->memory_section[j];
-			if (section->vir_start == info->kernel_virtual_start) {
-				mm_info("skip already maped memeory 0x%x\n", already_map);
-				build_tlb_table_entry(section->vir_start + already_map,
+			if (section->vir_start == KERNEL_VIRTUAL_BASE) {
+				mm_info("Skip already maped memeory 0x%x\n", already_map);
+				build_kernel_pde_entry(section->vir_start + already_map,
 						section->phy_start + already_map,
-						section->size - already_map, flag);
+						section->maped_size - already_map, flag);
 			} else {
-				build_tlb_table_entry(section->vir_start,
+				build_kernel_pde_entry(section->vir_start,
 						 section->phy_start,
-						 section->size, flag);
+						 section->maped_size, flag);
 			}
 		}
 	}
@@ -348,86 +305,200 @@ int do_map_memory(struct mm_bank *bank)
 	return 0;
 }
 
-static unsigned long map_memory(struct mm_bank *bank)
+int map_zone_memory(struct mm_zone *zone, int size)
+{
+	struct mm_section *section;
+	int i;
+	size_t map_size = 0;
+	size_t tmp;
+	unsigned long zone_map_end;
+	unsigned long map_base;
+
+	if (size <= 0)
+		return -EINVAL;
+
+	/* map_base should be pde align */
+	zone_map_end = zone->map_base + size;
+	map_base = zone->map_base;
+	if (map_base == zone_map_end)
+		return 0;
+
+	for (i = 0; i < zone->nr_section; i++) {
+		section = &zone->memory_section[i];
+
+		/* if the section already maped skiped this section */
+		if (section->maped_size)
+			continue;
+
+		/* the case that physical start is not pde align */
+		tmp = section->phy_start -
+			PDE_MIN_ALIGN(section->phy_start);
+		map_base += tmp;
+
+		/* the biggest size that this section can map */
+		map_size = zone_map_end - map_base;
+		if (map_size > section->size)
+			map_size = section->size;
+
+		/* 
+		 * pv_offset need to consider on case - when
+		 * the phy_start is not ARCH_PDE_ALIGN_SIZE align
+		 */
+		section->vir_start = map_base;
+		section->pv_offset = section->vir_start - section->phy_start;
+
+		section->maped_size = map_size;
+		zone->maped_size += map_size;
+
+		map_base = PDE_ALIGN(map_base + map_size);
+		zone->map_base = map_base;
+		if (zone->map_base == zone_map_end)
+			break;
+	}
+
+	return 0;
+}
+
+static void map_kernel_memory(void)
 {
 	int i;
 	struct mm_zone *zone;
-	struct mm_section *tmp;
-	u32 size;
-	struct soc_memory_info *info = get_soc_memory_info();
-	address_t map_base;
+	struct mm_section *section;
+	struct soc_memory_info *info;
+	size_t size;
+
+	info = get_soc_memory_info();
+	zone = &mm_bank->zone[MM_ZONE_NORMAL];
+	zone->map_base = KERNEL_VIRTUAL_BASE;
 
 	/*
-	 * map normal memory to virtual address, firest 
+	 * map normal memory to virtual address, first 
 	 * we need to map the address which kernel loaded
-	 * kernel is loaded at normal memory
+	 * kernel is loaded at normal memory, system phsyic
+	 * base memory needed to be 0xn0000000.
 	 */
-	map_base = info->kernel_virtual_start;
-	zone = &bank->zone[MM_ZONE_NORMAL];
-	for (i = 0; i < zone->nr_section; i++){
-		tmp = &zone->memory_section[i];
-		if (tmp->phy_start == info->kernel_physical_start) {
-			size = map_section_to_virtual(tmp, map_base);
-			map_base += size;
+	for (i = 0; i < zone->nr_section; i++) {
+		section = &zone->memory_section[i];
+		if (section->phy_start == info->kernel_physical_start) {
+			if (section->size > KERNEL_VIRTUAL_SIZE)
+				size = KERNEL_VIRTUAL_SIZE;
+			else 
+				size = section->size;
+
+			section->vir_start = zone->map_base;
+			section->pv_offset =
+				section->vir_start - section->phy_start;
+			section->maped_size = size;
+			zone->maped_size += size;
+			zone->map_base += PDE_ALIGN(size);
 			break;
 		}
 	}
-		
+
 	/*
 	 * then we can directy map other memeory of other zone;
 	 * a question, should we map the IO memory at first?
 	 * since it may take over to many virtual memory.
 	 */
-	for (i = 0; i < MM_ZONE_UNKNOW; i++) {
-		size = map_zone_to_virtual(&bank->zone[i], map_base);
-		map_base += size;
-	}
-
-	return do_map_memory(bank);
+	map_zone_memory(&mm_bank->zone[MM_ZONE_NORMAL],
+			KERNEL_VIRTUAL_SIZE - PDE_ALIGN(size));
 }
 
-static int init_page_table(void)
+static void map_dma_memory(void)
 {
-	int i;
-	struct mm_bank *bank = get_memory_bank();
-	unsigned long tmp;
-	unsigned long size;
-	struct page *page;
-	struct mm_zone *zone = &bank->zone[MM_ZONE_NORMAL];
-	long pv_offset;
-	struct soc_memory_info *info = get_soc_memory_info();
-	address_t kernel_end = info->code_end;
+	struct mm_zone *zone;
 
-	/* page table start addr */
-	_page_table = (struct page *)(baligin(kernel_end, sizeof(int)));
-	tmp = (unsigned long)(_page_table + bank->total_page);
+	zone = &mm_bank->zone[MM_ZONE_DMA];
+	zone->map_base = KERNEL_DMA_BASE;
+	map_zone_memory(zone, KERNEL_DMA_SIZE);
+}
 
-	/* bitmap start addr */
-	_page_map = (u32 *)(baligin(tmp, sizeof(u32)));
+static void map_res_memory(void)
+{
+	struct mm_zone *zone;
+	size_t map_size;
 
-	/* how much memory is aready used then need
-	 * to set it bit in bitmap to 0
-	 */
-	tmp = (unsigned long)(_page_map + bits_to_long(bank->total_page));
-	memset((char *)_page_map, 0, tmp - (unsigned long)_page_map);
+	/* resverd memory is maped at kernel memory */
+	zone = &mm_bank->zone[MM_ZONE_NORMAL];
+	mm_bank->zone[MM_ZONE_RES].map_base = zone->map_base;
+	map_size = KERNEL_VIRTUAL_BASE + 
+		KERNEL_VIRTUAL_SIZE - zone->map_base;
 
-	size = tmp - info->kernel_virtual_start;
-	size = baligin(size, PAGE_SIZE);
-	zone->free_size = zone->free_size - size;
-	size = size >> PAGE_SHIFT;
-	zone->free_pages = zone->free_pages -size;
+	zone = &mm_bank->zone[MM_ZONE_RES];
+	map_zone_memory(zone, map_size);
+}
 
-	for (i = 0; i < zone->nr_section; i++) {
-		if (info->kernel_virtual_start == zone->memory_section[i].vir_start) {
-			pv_offset = zone->memory_section[i].pv_offset;
-			break;
+static void map_memory(void)
+{
+	map_kernel_memory();
+	map_dma_memory();
+	map_res_memory();
+
+	do_map_memory();
+}
+
+static unsigned long init_sections_page_table(unsigned long base)
+{
+	int i, j;
+	struct mm_zone *zone;
+	struct mm_section *section;
+	struct page *tmp = (struct page *)base;
+
+	for (i = 0; i < MM_ZONE_UNKNOWN; i++) {
+		zone = &mm_bank->zone[i];
+		for (j = 0; j < zone->nr_section; j++) {
+			section = &zone->memory_section[j];
+			section->page_table = tmp;
+			tmp += section->size >> PAGE_SHIFT;
 		}
 	}
 
-	tmp = info->kernel_virtual_start;
+	memset((char *)base, 0, (unsigned long)tmp - base);
+
+	return (unsigned long)tmp;
+}
+
+static unsigned long init_sections_bitmap(unsigned long base)
+{
+	int i, j;
+	struct mm_zone *zone;
+	struct mm_section *section;
+	u32 *tmp = (u32 *)base;
+
+	for (i = 0; i < MM_ZONE_UNKNOWN; i++) {
+		zone = &mm_bank->zone[i];
+		for (j = 0; j < zone->nr_section; j++) {
+			section = &zone->memory_section[j];
+			section->bitmap = tmp;
+			section->bm_current = 0;
+			section->bm_end = section->size >> PAGE_SHIFT;
+			tmp += bits_to_long(section->size >> PAGE_SHIFT);
+		}
+	}
+
+	memset((char *)base, 0, (unsigned long)tmp - base);
+
+	return (unsigned long)tmp;
+}
+
+static int update_boot_section_info(struct mm_section *section,
+			size_t kernel_boot_page)
+{
+	long pv_offset = section->pv_offset;
+	size_t size = kernel_boot_page;
+	unsigned long tmp = section->vir_start;
+	struct page *page = section->page_table;
+	int i;
+
+	if (tmp != KERNEL_VIRTUAL_BASE)
+		return -EINVAL;
+
+	/*
+	 * these memory maped at boot stage must
+	 * in the same section
+	 */
 	for (i = 0; i < size; i++) {
-		set_bit(_page_map, i);
-		page = &_page_table[i];
+		set_bit(section->bitmap, i);
 
 		/* init page struct */
 		page->phy_address = tmp - pv_offset;
@@ -441,41 +512,56 @@ static int init_page_table(void)
 		tmp += PAGE_SIZE;
 	}
 
-	/* code to init bm_current bm_start bm_end */
-	zone->bm_start = size;
-	zone->bm_current = size;
-	i = zone->bm_end = zone->page_num;
-
-	zone = &bank->zone[MM_ZONE_DMA];
-	zone->bm_start = i;
-	zone->bm_current = i;
-	zone->bm_end = i + zone->page_num;
-	i = i + zone->page_num;
-
-	zone = &bank->zone[MM_ZONE_RES];
-	zone->bm_start = i;
-	zone->bm_current = i;
-	zone->bm_end = i + zone->page_num;
+	section->bm_current = size;
+	section->nr_free_pages -= kernel_boot_page;
 
 	return 0;
 }
 
-
-static void dump_memory_info(void)
+static int init_page_table(void)
 {
-	struct mm_bank *bank = get_memory_bank();
-	struct mm_zone *zone;
 	int i;
-	char *zone_str[MM_ZONE_UNKNOW] = {"normal", "dma", "res", "io"};
+	unsigned long size;
+	struct mm_section *section = NULL;
+	unsigned long base_addr = 0;
+	struct mm_zone *zone = &mm_bank->zone[MM_ZONE_NORMAL];
+	struct soc_memory_info *info = get_soc_memory_info();
 
-	kernel_info("zone   size   free_size  bm_start  bm_current bm_end\n");
-	for (i = 0; i < MM_ZONE_UNKNOW; i++) {
-		zone = &bank->zone[i];
-		kernel_info("%s  0x%x  0x%x  %d  %d  %d\n",
-			zone_str[i], zone->total_size,
-			zone->free_size, zone->bm_start,
-			zone->bm_current,zone->bm_end);	
+	/* page table start addr */
+	base_addr = align(info->code_end, sizeof(unsigned long));
+	base_addr = init_sections_page_table(base_addr);
+
+	base_addr = align(base_addr, sizeof(u32));
+	base_addr = init_sections_bitmap(base_addr);
+
+	/*
+	 * here the base addr is the end of the addr
+	 * which kernel used before load other module
+	 * and start to using kmalloc and get free
+	 * page
+	 */
+	for (i = 0; i < zone->nr_section; i++) {
+		section = &zone->memory_section[i];
+		if (KERNEL_VIRTUAL_BASE == section->vir_start) {
+			break;
+		}
 	}
+
+	if (section == NULL)
+		panic("Some error happed in memory\n");
+
+	/* update the normal zone's information */
+	base_addr = align(base_addr, PAGE_SIZE);
+	zone->free_size = zone->free_size -
+		(base_addr - KERNEL_VIRTUAL_BASE);
+	zone->nr_free_pages = zone->free_size >> PAGE_SHIFT;
+
+	/* update the boot section information */
+	size = base_addr - info->kernel_virtual_start;
+	size = size >> PAGE_SHIFT;
+	update_boot_section_info(section, size);
+
+	return 0;
 }
 
 static void clear_user_tlb(void)
@@ -483,11 +569,22 @@ static void clear_user_tlb(void)
 	clear_tlb_entry(0x0, 2048);
 }
 
+static void update_section_table(void)
+{
+	int i, j, k = 0;
+	struct mm_zone *zone;
+
+	for (i = 0; i < MM_ZONE_UNKNOWN; i++) {
+		zone = &mm_bank->zone[i];
+		for (j = 0; j < zone->nr_section; j++) {
+			section_table[k] = &zone->memory_section[j];
+			k++;
+		}
+	}
+}
+
 int mm_init(void)
 {
-	struct mm_bank *bank = get_memory_bank();
-	struct soc_memory_info *info = get_soc_memory_info();
-
 	mm_info("Init memory management\n");
 
 	/*
@@ -496,59 +593,75 @@ int mm_init(void)
 	 * will create all page tables for kernel. after init page
 	 * table can used all kernel memory.
 	 */
-	init_memory_bank(bank);
-
-	analyse_soc_memory_info(info, bank);
-	map_memory(bank);
+	init_memory_bank();
+	analyse_soc_memory_info();
+	map_memory();
 	init_page_table();
-
-	dump_memory_info();
+	update_section_table();
 
 	/* do not use printk before late_console_init */
 	clear_user_tlb();
-
 	return 0;
 }
 
-int page_state(int n)
+static inline struct mm_section *va_get_section(unsigned long va)
 {
-	return read_bit(_page_map, n);
+	int i = 0;
+	struct mm_section *section;
+
+	while (section = section_table[i]) {
+		if ((va >= section->vir_start) &&
+			(va < (section->vir_start + section->size)))
+			break;
+		i++;
+	}
+
+	return section;
 }
 
-struct page *get_page(int i)
+static inline struct mm_section *pa_get_section(unsigned long pa)
 {
-	return (struct page *)(_page_table + i);
+	int i = 0;
+	struct mm_section *section;
+
+	while (section = section_table[i]) {
+		if ((pa >= section->phy_start) &&
+			(pa < (section->phy_start + section->size)))
+			break;
+		i++;
+	}
+
+	return section;
 }
+
+static inline struct mm_section *page_get_section(struct page *page)
+{
+	return pa_get_section(page->phy_address);
+}
+
+#define section_page_id(va, base)	((va - base) >> PAGE_SHIFT)
+
+#define section_va_to_page(section, va)	\
+	(&section->page_table[section_page_id((va), section->vir_start)])
+
+#define section_page_to_va(section, page) \
+	(section->vir_start + ((page - section->page_table) << PAGE_SHIFT))
+
+#define section_pa_to_page(section, pa)	\
+	(&section->page_table[section_page_id((pa), section->phy_start)])
 
 struct page *va_to_page(unsigned long va)
 {
-	struct soc_memory_info *info = get_soc_memory_info();
+	struct mm_section *section = va_get_section(va);
 
-	return get_page((va - info->kernel_virtual_start) >> PAGE_SHIFT);
-}
-
-int va_to_page_id(unsigned long va)
-{
-	struct soc_memory_info *info = get_soc_memory_info();
-
-	return ( (va - info->kernel_virtual_start) >> PAGE_SHIFT);
-}
-
-unsigned long page_id_to_va(int index)
-{
-	struct soc_memory_info *info = get_soc_memory_info();
-
-	return (info->kernel_virtual_start + (index << PAGE_SHIFT));
-}
-
-int page_to_page_id(struct page *page)
-{
-	return  (page - _page_table);
+	return section ? section_va_to_page(section, va) : 0;
 }
 
 unsigned long page_to_va(struct page *page)
 {
-	return page_id_to_va(page_to_page_id(page));
+	struct mm_section *section = page_get_section(page);
+
+	return section ? section_page_to_va(section, page) : 0;
 }
 
 unsigned long page_to_pa(struct page *page)
@@ -556,57 +669,18 @@ unsigned long page_to_pa(struct page *page)
 	return (page->phy_address);
 }
 
-static long va_get_pv_offset(unsigned long va)
-{
-	int i,j;
-	struct mm_zone *zone;
-	struct mm_bank *bank = get_memory_bank();
-	struct mm_section *s;
-
-	for (i = 0; i< MM_ZONE_UNKNOW; i++) {
-		zone = &bank->zone[i];
-		for (j = 0; j < zone->nr_section; j++) {
-			s = &zone->memory_section[j];
-			if ((va >= s->vir_start) && 
-			    (va <= (s->vir_start+s->size)))
-				return (s->pv_offset);
-		}
-	}
-
-	return 0;
-}
-
-static long pa_get_pv_offset(unsigned long pa)
-{
-	int i,j;
-	struct mm_zone *zone;
-	struct mm_bank *bank = get_memory_bank();
-	struct mm_section *s;
-
-	for (i = 0; i< MM_ZONE_UNKNOW; i++) {
-		zone = &bank->zone[i];
-		for (j = 0; j < zone->nr_section; j++) {
-			s = &zone->memory_section[j];
-			if((pa >= s->phy_start) && 
-			(pa <= (s->phy_start+s->size)))
-				return (s->pv_offset);
-		}
-	}
-
-	return 0;
-}
-
 unsigned long pa_to_va(unsigned long pa)
 {
-	long pv_offset = pa_get_pv_offset(pa);
+	struct mm_section *section = pa_get_section(pa);
 
-	return pv_offset ? (pa + pv_offset) : 0;
-
+	return section ? (pa + section->pv_offset) : 0;
 }
 
 struct page *pa_to_page(unsigned long pa)
 {
-	return va_to_page(pa_to_va(pa));
+	struct mm_section *section = pa_get_section(pa);
+
+	return section ? section_pa_to_page(section, pa) : 0;
 }
 
 unsigned long va_to_pa(unsigned long va)
@@ -614,17 +688,17 @@ unsigned long va_to_pa(unsigned long va)
 	return page_to_pa(va_to_page(va));
 }
 
-static struct page *init_pages(u32 index, int count, unsigned long flag)
+static void init_pages(struct mm_section *section,
+		int index, int count, unsigned long flag)
 {
-	struct page *pg;
 	int i;
+	struct page *pg = &section->page_table[index];
+	long pv_offset = section->pv_offset;
 	unsigned long va;
-	long pv_offset;
+
+	va = section->vir_start + (index >> PAGE_SHIFT);
 
 	for (i = index; i < index + count; i++) {
-		pg = get_page(i);
-		va = page_to_va(pg);
-		pv_offset = va_get_pv_offset(va);
 		pg->phy_address = va - pv_offset;
 		pg->usage = 0;
 		init_list(&pg->plist);
@@ -645,244 +719,320 @@ static struct page *init_pages(u32 index, int count, unsigned long flag)
 		pg->free_base = va;
 		pg->flag = flag;
 		pg->usage = 0;
+		va += PAGE_SIZE;
 	}
-
-	pg = get_page(index);
-
-	return pg;
 }
 
-static void update_memory_bitmap(u32 index, int count, int update)
+static void update_memory_bitmap(u32 *bitmap,
+		u32 index, int count, int update)
 {
 	int i;
-	u32 *page_map = get_page_map();
 
 	for (i = index; i < index + count; i++) {
 		if (update)
-			set_bit(page_map, i);
+			set_bit(bitmap, i);
 		else
-			clear_bit(page_map, i);
+			clear_bit(bitmap, i);
 	}
 }
 
-static u32 find_continous_pages(struct mm_zone *zone, int count)
+static unsigned long get_free_pages_from_section(struct mm_section *section,
+			size_t count, int flag, int vp)
 {
-	int i;
-	int again = 0;
-	int sum = 0;
-	u32 *page_map = get_page_map();
-	
-	i = zone->bm_current;
-	while (1) {
-		if (!read_bit(page_map, i)) {
-			sum++;
-			if (sum == count)
-				return (i - count + 1);
-		}
-		else
-			sum = 0;
+	long index;
+	unsigned long ret;
 
-		if (i == (zone->bm_end - 1)) {
-			again = 1;
-			sum = 0;
-			/* fix me needed to be checked */
-			i = zone->bm_start;
-		}
-
-		if (again) {
-			if(i == zone->bm_current)
-				break;
-		}
-
-		i++;
-	}
-
-	return 0;
-}
-
-static void *_get_free_pages(int count, u32 flag)
-{
-	struct mm_zone *zone;
-	unsigned long res;
-	struct page *pg;
-	u32 index;
-	int id;
-	struct mm_bank *pbank = get_memory_bank();
-
-	id = (flag & GFP_ZONE_ID_MASK) >> 1;
-	if (id >= MM_ZONE_UNKNOW) {
-		return NULL;
-	}
-	zone = &pbank->zone[id];
-
-	/*
-	 * before read the basic information of this 
-	 * memory zone, we must get the mutex of this 
-	 * zone to avoid zone information is modifyed
-	 */
-	mutex_lock(&zone->zone_mutex);
-
-	if (zone->free_pages < count) {
-		mm_error("No more size in zone %d\n", id);
-		mutex_unlock(&zone->zone_mutex);
-		return NULL;
-	}
-
-	index = find_continous_pages(zone, count);
-	if (index == 0) {
-		mm_error("can not find %d continous pages\n", count);
-		mutex_unlock(&zone->zone_mutex);
-		return NULL;
+	index = bitmap_find_free_base(section->bitmap,
+				section->bm_current, 0,
+				section->nr_page,count);
+	if (index < 0) {
+		mm_error("Can not find %d continous pages\n", count);
+		return 0;
 	}
 
 	/*
 	 * set the releated bit in bitmap
-	 * in case of other process read these bit 
+	 * in case of other process read these bit
 	 * when get free pages
 	 */
-	update_memory_bitmap(index, count, 1);
+	update_memory_bitmap(section->bitmap, index, count, 1);
 
 	/* update the zone information */
-	zone->bm_current = index + count;
-	if (zone->bm_current >= zone->bm_end)
-		zone->bm_current = zone->bm_start;
+	section->bm_current = index + count;
+	if (section->bm_current >= section->bm_end)
+		section->bm_current = 0;
 
-	zone->free_size = zone->free_size - (count << PAGE_SHIFT);
-	zone->free_pages = zone->free_pages - count;
+	section->free_size -= PAGE_SIZE * count;
+	section->nr_free_pages -= count;
 
-	mutex_unlock(&zone->zone_mutex);
+	init_pages(section, index, count, flag);
 
-	pg = init_pages(index, count, flag);
-	res = page_to_va(pg);
+	if (vp)
+		ret = section->vir_start + (index << PAGE_SHIFT);
+	else
+		ret = (unsigned long)(section->page_table + index);
 
-	return (void *)res;
+	return ret;
 }
 
-void  *get_free_pages(int count, unsigned long flag)
+static unsigned long __get_free_pages(int count, u32 flag, int vp)
+{
+	struct mm_zone *zone;
+	int id;
+	struct mm_section *section = NULL;
+	unsigned long ret = 0;
+
+	/*
+	 * get the zone id from the flag
+	 */
+	id = (flag & GFP_ZONE_ID_MASK) >> 1;
+	if (id >= MM_ZONE_UNKNOWN)
+		return 0;
+
+	zone = &mm_bank->zone[id];
+	mutex_lock(&zone->zone_mutex);
+
+	if (zone->nr_free_pages < count)
+		goto out;
+
+	/* find a section which have count pages */
+	for (id = 0; id < zone->nr_section; id++) {
+		if (zone->memory_section[id].nr_free_pages < count)
+			continue;
+
+		section = &zone->memory_section[id];
+		break;
+	}
+
+	if (!section)
+		goto out;
+
+	ret = get_free_pages_from_section(section, count, flag, vp);
+	if (!ret)
+		goto out;
+
+	zone->free_size -= (count << PAGE_SHIFT);
+	zone->nr_free_pages -= count;
+
+out:
+	mutex_unlock(&zone->zone_mutex);
+	return ret;
+}
+
+struct page *request_pages(int count, int flag)
+{
+	if (count < 0)
+		return NULL;
+
+	return (struct page *)__get_free_pages(count, flag, 0);
+}
+
+void *get_free_pages(int count, unsigned long flag)
 {
 	if (count <= 0)
 		return NULL;
 
-	return _get_free_pages(count, flag);
+	return __get_free_pages(count, flag, 1);
 }
 
-void update_bm_current(struct mm_zone *zone)
+void update_bm_current(struct mm_section *section)
 {
-	u32 *page_map = get_page_map();
 	int count = 0;
-	int start = zone->bm_current - 1;
+	int start = section->bm_current - 1;
 
-	if (zone->bm_start == zone->bm_current)
+	if (0 == section->bm_current)
 		return;
 
-	while (!read_bit(page_map, start)) {
+	while (!read_bit(section->bitmap, start)) {
 		count ++;
 		start--;
 	}
 
-	zone->bm_current -= count;
+	section->bm_current -= count;
 	mm_debug("update bm_current count:%d current %d\n",
-			count, zone->bm_current);
+			count, section->bm_current);
 }
 
-static void __free_pages(struct page *pg, struct mm_zone *zone)
+static void __free_pages(struct mm_section *section, struct page *page)
 {
-	int index = 0;
-	int count = 0;
-	index = page_to_page_id(pg);
-	int i;
-	
-	mutex_lock(&zone->zone_mutex);
+	int index = 0, count = 0, i;
 
-	count = pg->count;
-	update_memory_bitmap(index, count, 0);
-	zone->free_size += count * PAGE_SIZE;
-	zone->free_pages += count;
+	index = page - section->page_table;
+	count = page->count;
+
+	update_memory_bitmap(section->bitmap, index, count, 0);
 
 	for (i = 0; i < count; i++) {
-		pg->flag = 0;
-		pg++;
+		page->flag = 0;
+		page++;
 	}
 
-	update_bm_current(zone);
+	update_bm_current(section);
+}
+
+static void _free_pages(struct mm_section *section, struct page *page)
+{
+	struct page *pg = page;
+	struct mm_zone *zone;
+	int id = 0;
+
+	if (!section || !page)
+		return;
+
+	if (!(pg->flag & __GFP_PAGE_HEADER))
+		return;
+
+	id = ((pg->flag) & GFP_ZONE_ID_MASK) >> 1;
+	zone = &mm_bank->zone[id];
+
+	mutex_lock(&zone->zone_mutex);
+
+	zone->nr_free_pages += page->count;
+	zone->free_size += page->count * PAGE_SIZE;
+	__free_pages(section, page);
 
 	mutex_unlock(&zone->zone_mutex);
 }
 
+
 void free_pages(void *addr)
 {
 	struct page *pg;
-	struct mm_zone *zone;
-	int id = 0;
-	struct mm_bank *pbank = get_memory_bank();
+	struct mm_section *section;
 
 	if (!is_aligin((unsigned long)addr, PAGE_SIZE)) {
 		mm_error("address not a page address\n");
 		return;
 	}
 
+	section = va_get_section((unsigned long)addr);
 	pg = va_to_page((unsigned long)addr);
 
-	if (pg->flag & __GFP_PAGE_HEADER) {
-		id = ((pg->flag) & GFP_ZONE_ID_MASK) >> 1;
-		zone = &pbank->zone[id];
-		__free_pages(pg, zone);
-	} else {
-		mm_error("addr to free are not page header\n");
-	}
+	_free_pages(section, pg);
 }
 
-void *get_free_page_aligin(unsigned long aligin, u32 flag)
+void release_page(struct page *page)
 {
-	struct mm_bank *bank = get_memory_bank();
-	int id;
-	int i;
-	unsigned long j;
-	struct page *page;
 	struct mm_section *section;
-	struct mm_zone *zone;
-	unsigned long offset = (aligin & 0x000fffff) >> PAGE_SHIFT;
 
-	id = (flag & GFP_ZONE_ID_MASK)>>1;
-	if (id >= MM_ZONE_UNKNOW)
-		return NULL;
+	if (!page)
+		return;
 
-	zone = &bank->zone[id];
-	id = 0;
-	mutex_lock(&zone->zone_mutex);
-	for (i = 0; i < zone->nr_section; i++) {
-		section = &zone->memory_section[i];
-		for (j = section->vir_start; 
-		     j < (section->vir_start) + (section->size);
-		     j += SIZE_1M) {
-			
-			id = va_to_page_id(j); 
-			id += offset;
-			if (!page_state(id)) {
-				goto out;
+	section = page_get_section(page);
+	_free_pages(section, page);
+}
+
+static struct page *find_align_page(struct mm_section *section,
+		unsigned long align, int nr, int flag)
+{
+	int i, id;
+	struct page *page = NULL;
+	unsigned long base = section->vir_start;
+
+	for ( ; base < section->vir_start + section->size; base += align) {
+		id = (base - section->vir_start) >> PAGE_SHIFT;
+
+		for (i = 0; i < nr; i++) {
+			if (read_bit(section->bitmap, id + i)) {
+				id = -1;
+				break;
 			}
 		}
+
+		if (id == -1)
+			continue;
+		else
+			goto out;
 	}
 
-	/* if have not find the page we need, set it to 0. */
-	id = 0;
+	id = -1;
+
 out:
-	if (id) {
-		update_memory_bitmap(id, 1, 1);
+	if (id != -1) {
+		update_memory_bitmap(section->bitmap, id, nr, 1);
+		init_pages(section, id, nr, flag);
+		page = section->page_table + id;
+	}
 
-		zone->free_size = zone->free_size - PAGE_SIZE;
-		zone->free_pages = zone->free_pages - 1;
+	return page;
+}
 
-		mutex_unlock(&zone->zone_mutex);
+static struct page *find_match_page(struct mm_section *section,
+		unsigned long align, int nr, int flag)
+{
+	int id;
+	struct page *page = NULL;
+	unsigned long base = section->vir_start;
 
-		page = init_pages(id, 1, flag);
-		
-		return ((void *)page_to_va(page));
+	for ( ; base < section->vir_start + section->size; base += align) {
+		id = (base - section->vir_start) >> PAGE_SHIFT;
+		id += align;
+		if (!read_bit(section->bitmap, id))
+			goto out;
+	}
+
+	id = -1;
+out:
+	if (id != -1) {
+		update_memory_bitmap(section->bitmap, id, nr, 1);
+		init_pages(section, id, nr, flag);
+		page = section->page_table + id;
+	}
+
+	return page;
+}
+
+
+/*
+ * this function can be merged with get_free_page_addr_match
+ * TBC
+ */
+static struct page *__request_special_pages(int nr, u32 align, int flag, int match)
+{
+	int i = 0, id;
+	struct mm_section *section;
+	struct mm_zone *zone;
+	struct page *page = NULL;
+
+	if (!is_align(align, PAGE_SIZE))
+		return NULL;
+
+	id = (flag & GFP_ZONE_ID_MASK) >> 1;
+	if (id >= MM_ZONE_UNKNOWN)
+		return NULL;
+
+	if (match)
+		align = (align & 0x000fffff) >> PAGE_SHIFT;
+
+	zone = &mm_bank->zone[i];
+	mutex_lock(&zone->zone_mutex);
+
+	for (i = 0; i < zone->nr_section; i ++) {
+		section = &zone->memory_section[i];
+		if (match)
+			page = find_match_page(section, align, nr, flag);
+		else
+			page = find_align_page(section, align, nr, flag);
+	}
+
+	if (page) {
+		zone->free_size = zone->free_size - nr * PAGE_SIZE;
+		zone->nr_free_pages = zone->nr_free_pages - nr;
 	}
 
 	mutex_unlock(&zone->zone_mutex);
 
-	return NULL;
+	return page;
+}
+
+struct page *get_free_pages_align(int nr, u32 align, int flag)
+{
+	return __request_special_pages(nr, align, flag, 0);
+}
+
+struct page *get_free_page_match(unsigned long match, int flag)
+{
+	return __request_special_pages(1, match, flag, 1);
 }
 
 void copy_page_va(u32 target, u32 source)

@@ -3,6 +3,7 @@
 
 #include <os/irq.h>
 #include <os/init.h>
+#include <os/mmu.h>
 
 #define MEM_MAX_REGION	16
 
@@ -15,14 +16,14 @@ struct memory_region {
 typedef int (*init_call_t)(void);
 
 struct soc_memory_info {
-	u32 code_start;		/* all kernel data-text start address */
-	u32 code_end;		/* kernel data-text end address */
-	u32 init_start;
-	u32 init_end;
-	u32 bss_start;
-	u32 bss_end;
-	u32 kernel_physical_start;
-	u32 kernel_virtual_start;
+	unsigned long code_start;		/* all kernel data-text start address */
+	unsigned long code_end;		/* kernel data-text end address */
+	unsigned long init_start;
+	unsigned long init_end;
+	unsigned long bss_start;
+	unsigned long bss_end;
+	unsigned long kernel_physical_start;
+	unsigned long kernel_virtual_start;
 	struct memory_region region[MEM_MAX_REGION];
 	int region_nr;
 };
@@ -39,7 +40,9 @@ struct soc_platform {
 	u32 (*system_clk_init)(void);
 	int (*system_timer_init)(unsigned int hz);
 	struct irq_chip *irq_chip;
+	struct mmu *mmu;
 	void (*parse_memory_info)(void);
+	struct mmu_controller *mmu_controller;
 	init_call_t *init_action;
 };
 
@@ -87,6 +90,11 @@ static inline struct soc_board *get_board(void)
 static inline struct soc_memory_info *get_soc_memory_info(void)
 {
 	return (&system_soc.memory_info);
+}
+
+static inline struct mmu *get_soc_mmu(void)
+{
+	return (system_soc.platform.mmu);
 }
 
 #define	DEFINE_SOC_PLATFORM(platform)	\

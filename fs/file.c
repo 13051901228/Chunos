@@ -187,17 +187,11 @@ int _sys_getdents(int fd, char *buf, int count)
 
 struct file_desc *alloc_and_init_file_desc(struct file_desc *p)
 {
-	struct file_desc *fd;
+	struct file_desc *fd = NULL;
 
 	fd = kzalloc(sizeof(struct file_desc), GFP_KERNEL);
 	if (!fd)
-		return NULL;
-
-	fd->cdir_name = kzalloc(256, GFP_KERNEL);
-	if (!fd->cdir_name) {
-		kfree(fd);
-		return NULL;
-	}
+		return -EINVAL;
 
 	fd->file_open[0] = __sys_open("/dev/ttyS0", O_RDWR);
 	fd->file_open[1] = __sys_open("/dev/ttyS0", O_RDWR);

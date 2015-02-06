@@ -2,7 +2,8 @@
 #define _ELF_H
 
 #include <os/types.h>
-#include <os/file.h>
+
+struct file;
 
 typedef unsigned char	elf_byte;
 typedef unsigned short	elf_half;
@@ -128,21 +129,22 @@ typedef enum _section_id {
 	SECTION_MAX
 } section_id;
 
-struct elf_section;
 struct elf_section {
-	char name[32];		/*section id,text data or bss*/
-	u32 offset;		/*section offset in the elf file*/
-	u32 size;		/*section size*/
-	u32 load_addr;
-	struct elf_section *next;
+	char name[32];		/* section id,text data or bss */
+	u32 offset;		/* section offset in the elf file */
+	u32 size;		/* section size */
+	u32 load_addr;		/* load_address to the memory*/
 };
 
 struct elf_file {
-	u32 alloc_size;
-	struct elf_section *head;
+	int section_nr;
+	size_t elf_size;
+	unsigned long entry_point_address;
+	struct elf_section *sections;
 };
 
 void release_elf_file(struct elf_file *file);
 struct elf_file *get_elf_info(struct file *file);
+size_t elf_memory_size(struct elf_file *efile);
 
 #endif

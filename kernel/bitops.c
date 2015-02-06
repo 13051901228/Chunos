@@ -42,3 +42,37 @@ void init_bitmap(u32 bitmap[], int n)
 		clear_bit(bitmap, i);
 	}
 }
+
+int bitmap_find_free_base(u32 *map, int start,
+		int value, int map_nr, int count)
+{
+	int i = start;
+	int again = 0;
+	int sum = 0;
+
+	while (1) {
+		if (read_bit(map, i) == value) {
+			sum++;
+			if (sum == count)
+				return (i + 1 - count);
+		} else {
+			sum = 0;
+		}
+
+		if (i == map_nr - 1) {
+			again = 1;
+			sum = 0;
+			i = 0;
+		}
+
+		if (again) {
+			if (i == start)
+				break;
+		}
+
+		i++;
+	}
+
+	return -ENOSPC;
+}
+

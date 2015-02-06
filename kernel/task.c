@@ -32,64 +32,31 @@ static char *init_envp[MAX_ENVP + 1] = {NULL};
 extern int init_signal_struct(struct task_struct *task);
 extern void copy_sigreturn_code(struct task_struct *task);
 
-static int init_mm_struct(struct task_struct *task, u32 user_sp)
-{
-	struct mm_struct *mm = &task->mm_struct;
-	struct mm_struct *mmp;
-	
-	/* init mm_struct, kernel task do not need this */
-	if (task->flag & PROCESS_TYPE_USER) {
-		mmp = &task->parent->mm_struct;
-		mm->elf_size = mmp->elf_size;
-		mm->stack_size = PROCESS_USER_STACK_BASE - user_sp;
-		mm->stack_curr = NULL;
-		mm->elf_curr = NULL;
-		init_list(&mm->stack_list);
-		init_list(&mm->elf_list);
-		init_list(&mm->elf_stack_list);
-		init_list(&mm->elf_image_list);
-		init_list(&mm->mmap_page_list);
-		init_list(&mm->mmap_mem_list);
-		init_bitmap(mm->mmap, PROCESS_USER_MMAP_SIZE >> PAGE_SHIFT);
-		mm->free_pos = 0;
-		mm->mmap_nr = PROCESS_USER_MMAP_SIZE >> PAGE_SHIFT;
-	}
-	
-	return 0;
-}
-
 static int init_task_struct(struct task_struct *task, u32 flag)
 {
 	struct task_struct *parent;
 	unsigned long flags;
-
-	/* if thread is a kernel thread, his parent is idle */
-	if (flag & PROCESS_TYPE_KERNEL)
-		parent = idle;
-	else
-		parent = current;
 
 	/* get a new pid */
 	task->pid = get_new_pid(task);
 	if ((task->pid) < 0)
 		return -EINVAL;
 
-	task->uid = parent->uid;
-	task->stack_base = NULL;
-	strncpy(task->name, parent->name, PROCESS_NAME_SIZE);
+	task->uid = current->uid;
+	task->stack_base = 0;
+	strncpy(task->name, current->name, strlen(current->name));
 	task->flag = flag;
 
 	/* add task to the child list of his parent. */
-	task->parent = parent;
+	task->parent = current;
 	init_list(&task->p);
 	init_list(&task->child);
 	init_mutex(&task->mutex);
 
-	/*
-	 * if process is a userspace process, init the file desc
-	 */
+	/* if process is a userspace process, init the file desc */
 	if (flag & PROCESS_TYPE_USER) {
-		task->file_desc = alloc_and_init_file_desc(parent->file_desc);
+		task->file_desc =
+			alloc_and_init_file_desc(current->file_desc);
 		if (!task->file_desc)
 			return -ENOMEM;
 	}
@@ -101,217 +68,22 @@ static int init_task_struct(struct task_struct *task, u32 flag)
 	return 0;
 }
 
-static void _release_task_memory(struct list_head *head)
-{
-	struct list_head *list;
-	struct page *page;
-	void *addr;
-
-	list_for_each(head, list) {
-		page = list_entry(list, struct page, plist);
-		list_del(list);
-		addr = (void *)page_to_va(page);
-		free_pages(addr);
-	}
-}
-
-static int release_task_page_table(struct task_struct *task)
-{
-	struct mm_struct *tmp = &task->mm_struct;
-
-	/* release task's page table */
-	_release_task_memory(&tmp->stack_list);
-	_release_task_memory(&tmp->elf_list);
-	_release_task_memory(&tmp->mmap_page_list);
-
-	return 0;
-}
-
-static int inline release_task_pages(struct task_struct *task)
-{
-	struct mm_struct *ms = &task->mm_struct;
-
-	/*
-	 * release task memeory which allocated
-	 * for task image and mmap, but usually
-	 * the mmap memory must use munmap to free
-	 * them.
-	 */
-	_release_task_memory(&ms->elf_stack_list);
-	_release_task_memory(&ms->elf_image_list);
-	_release_task_memory(&ms->mmap_mem_list);
-
-	return 0;
-}
-
 static int inline release_kernel_stack(struct task_struct *task)
 {
 	if (task->stack_origin)
-		free_pages(task->stack_origin);
+		free_pages((void *)task->stack_origin);
 
-	task->stack_base = NULL;
-	task->stack_origin = NULL;
+	task->stack_base = 0;
+	task->stack_origin = 0;
 	return 0;
 }
 
 static int release_task_memory(struct task_struct *task)
 {
-	/* firset pate table then pages */
-	if (task->flag & PROCESS_TYPE_USER) {
-		release_task_pages(task);
-		release_task_page_table(task);
-	}
+	/* TBD */
 	release_kernel_stack(task);
 
 	return 0;
-}
-
-static int alloc_page_table(struct task_struct *new)
-{
-	struct mm_struct *tmp = &new->mm_struct;
-	int i, s, e, m;
-	void *addr;
-	struct page *page;
-
-	s = (PROCESS_STACK_SIZE + SIZE_NM(4) - 1) >> 22;
-	e = (PROCESS_IMAGE_SIZE + SIZE_NM(4) - 1) >> 22;
-	m = (PROCESS_USER_MMAP_SIZE) >> 22;
-
-	/*
-	 * at first,only allocate 16k stack(need 4k pagetable
-	 * for future) and ro data bss,section. now the max
-	 * size for elf image is 1M, so we also need 4k page
-	 * table for elf image. allocate page table for user
-	 * stack, one page can map 1M memory. first stack and
-	 * elf we only need one page for each.
-	 */
-	for (i=0; i < s ; i++) {
-		addr = get_free_page(GFP_PGT);
-		memset(addr, 0, PAGE_SIZE);
-		debug("allcoate statck page_table 0x%x\n", (u32)addr);
-		if (addr == NULL) {
-			goto error;
-		}
-		page = va_to_page((unsigned long)addr);
-		page->free_base += (PAGE_SIZE - sizeof(u32));
-		list_add_tail(&tmp->stack_list, &page->pgt_list);
-	}
-	tmp->stack_curr = list_next(&tmp->stack_list);
-
-	/* allocate page table for elf file memory */
-	for (i = 0; i < e; i ++) {
-		addr = get_free_page(GFP_PGT);
-		memset(addr, 0, PAGE_SIZE);
-		debug("allcoate elf page_table 0x%x\n", (u32)addr);
-		if (addr == NULL) {
-			goto error;
-		}
-		page = va_to_page((unsigned long)addr);
-		list_add_tail(&tmp->elf_list, &page->pgt_list);
-	}
-	tmp->elf_curr = list_next(&tmp->elf_list);
-
-	/* allocate page table for mmap zone */
-	for (i = 0; i < m; i++) {
-		addr = get_free_page(GFP_PGT);
-		memset(addr, 0, PAGE_SIZE);
-		debug("allocate mmap page_table 0x%x\n", (u32)addr);
-		if (addr == NULL) {
-			goto error;
-		}
-		page = va_to_page((unsigned long)addr);
-		list_add_tail(&tmp->mmap_page_list, &page->pgt_list);
-	}
-
-	return 0;
-
-error:
-	release_task_page_table(new);
-
-	return -ENOMEM;
-}
-
-static int task_map_memory(void *addr, struct task_struct *task, int flag)
-{
-	struct mm_struct *ms = &task->mm_struct;
-	struct list_head *list;
-	struct page *page;
-	int flag_new = flag & PROCESS_MAP_MASK;
-
-	switch (flag_new) {
-		case PROCESS_MAP_STACK:
-			list = ms->stack_curr;
-			break;
-
-		case PROCESS_MAP_ELF:
-			list = ms->elf_curr;
-			break;
-
-		default:
-			return -EINVAL;
-	}
-
-repeat:
-	if (list == NULL) {
-		/*  page table has been used over,need more,TBD */
-		return -ENOMEM;
-	}
-
-	page = list_entry(list, struct page, pgt_list);
-	if (page->free_size == 0) {
-		list = list_next(list);
-		goto repeat;
-	}
-
-	/*
-	 * we get the base address of the page table to map
-	 * the new address default 4k a timei(4b for 4k).
-	 * fill page table, flag argument TBD
-	 */
-	build_page_table_entry((unsigned long)page->free_base,
-			       (unsigned long)addr, PAGE_SIZE, 0);
-
-	if (flag_new == PROCESS_MAP_ELF)
-		page->free_base += sizeof(unsigned long);
-	else
-		page->free_base -= sizeof(unsigned long);
-
-	page->free_size -= sizeof(unsigned long);
-
-	return 0;
-}
-
-static int bitmap_find_free_base(u32 *map, int start,
-		int value, int map_nr, int count)
-{
-	int i = start;
-	int again = 0;
-	int sum = 0;
-
-	while (1) {
-		if (read_bit(map, i) == value) {
-			sum++;
-			if (sum == count)
-				return (i + 1 - count);
-		} else {
-			sum = 0;
-		}
-
-		if (i == map_nr - 1) {
-			again = 1;
-			sum = 0;
-			i = 0;
-		}
-
-		if (again) {
-			if (i == start)
-				break;
-		}
-
-		i++;
-	}
-
-	return -ENOSPC;
 }
 
 #define mmap_start(start)	\
@@ -326,6 +98,7 @@ static int bitmap_find_free_base(u32 *map, int start,
 int mmap(struct task_struct *task, unsigned long start,
 	 unsigned long virt, int flags, int fd, offset_t off)
 {
+#if 0
 	struct mm_struct *ms = &task->mm_struct;
 	int i, j;
 	struct list_head *list = &ms->mmap_page_list;
@@ -362,13 +135,14 @@ int mmap(struct task_struct *task, unsigned long start,
 	page->flag |= __GFP_USER;
 	page->free_base = (virt & 0xfffff000) | (mmap_magic(fd));
 	page->mmap_offset = off;
-
+#endif
 	return 0;
 }
 
 int munmap(struct task_struct *task, unsigned long start,
 		size_t length, int flags, int sync)
 {
+#if 0
 	struct mm_struct *ms = &task->mm_struct;
 	int bit_start;
 	int i, j;
@@ -444,12 +218,13 @@ int munmap(struct task_struct *task, unsigned long start,
 		flush_mmu_tlb();
 		flush_cache();
 	}
-
+#endif
 	return 0;
 }
 
 unsigned long get_mmap_user_base(struct task_struct *task, int page_nr)
 {
+#if 0
 	struct mm_struct *ms = &task->mm_struct;
 	unsigned long start;
 	int i, j, k;
@@ -476,52 +251,8 @@ unsigned long get_mmap_user_base(struct task_struct *task, int page_nr)
 		i++;
 	}
 	ms->free_pos = (i >= ms->mmap_nr ? 0 : i);
-
-	return start;
-}
-
-static int alloc_memory_and_map(struct task_struct *task)
-{
-	struct mm_struct *ms = &task->mm_struct;
-	int i, s, e;
-	void *addr;
-	struct page *page;
-
-	s = page_nr(PROCESS_STACK_SIZE);
-	e = page_nr(PROCESS_IMAGE_SIZE);
-
-	/* if there are no enough memory for task */
-	if (mm_free_page(MM_ZONE_NORMAL) < (s + e)) {
-		kernel_error("Bug: no enough memory\n");
-		return -ENOMEM;
-	}
-
-	for (i = 0; i < s; i++) {
-		addr = get_free_page(GFP_KERNEL);
-		if (addr == NULL)
-			goto out;
-
-		task_map_memory(addr, task, PROCESS_MAP_STACK);
-		page = va_to_page((unsigned long)addr);
-		list_add_tail(&ms->elf_stack_list, &page->plist);
-	}
-
-	for (i = 0; i < e; i ++) {
-		addr = get_free_page(GFP_KERNEL);
-		if (addr == NULL)
-			goto out;
-
-		task_map_memory(addr, task, PROCESS_MAP_ELF);
-		page = va_to_page((unsigned long)addr);
-		list_add_tail(&ms->elf_image_list, &page->plist);
-	}
-
+#endif
 	return 0;
-
-out:
-	release_task_memory(task);
-
-	return -ENOMEM;
 }
 
 static int alloc_kernel_stack(struct task_struct *task)
@@ -529,94 +260,14 @@ static int alloc_kernel_stack(struct task_struct *task)
 	if(task->stack_base)
 		return -EINVAL;
 
-	task->stack_base = get_free_pages(KERNEL_STACK_SIZE >> PAGE_SHIFT,
-					  GFP_KERNEL);
+	task->stack_base = (unsigned long)
+		get_free_pages(page_nr(KERNEL_STACK_SIZE), GFP_KERNEL);
 	task->stack_origin = task->stack_base;
-	debug("task %s stack is 0x%x\n",
-		     task->name, (u32)task->stack_base);
-
-	if (task->stack_base == NULL)
+	if (task->stack_base == 0)
 		return -ENOMEM;
 
-	return 0;
-}
-
-static int alloc_memory_for_task(struct task_struct *task)
-{
-
-	int ret = 0;
-
-	ret = alloc_kernel_stack(task);
-	if (ret) {
-		kernel_error("allocate kernel stack failed\n");
-		return ret;
-	}
-
-	if (task->flag & PROCESS_TYPE_USER) {
-		ret = alloc_page_table(task);
-		if (ret) {
-			kernel_error("allcate page_table failed\n");
-			goto error;
-		}
-
-		ret = alloc_memory_and_map(task);
-		if (ret) {
-			kernel_error("no enough memory for task\n");
-			goto error;
-		}
-	}
-
-	return ret;
-
-error:
-	release_kernel_stack(task);
-
-	return -ENOMEM;
-}
-
-static int copy_process_memory(struct task_struct *old,struct task_struct *new)
-{
-	struct mm_struct *old_mm = &old->mm_struct;
-	struct mm_struct *new_mm = &new->mm_struct;
-	int i = 0, s, e;
-	struct list_head *list_old = &old_mm->elf_stack_list;
-	struct list_head *list_new = &new_mm->elf_stack_list;
-	struct page *page_old;
-	struct page *page_new;
-	u32 old_base; u32 new_base;
-
-	/*
-	 * one page for argv, so need to be included in elf_size
-	 * frist need to flush cache to phsyic memory
-	 */
-	s = page_nr(new_mm->stack_size);
-	e = page_nr(new_mm->elf_size + PAGE_SIZE);
-
-	flush_cache();
-
-	/* copy stack */
-	for (i = 0; i < s; i ++) {
-		list_old = list_next(list_old);
-		list_new = list_next(list_new);
-		page_old = list_entry(list_old, struct page, pgt_list);
-		page_new = list_entry(list_new, struct page, pgt_list);
-		old_base = (u32)page_to_va(page_old);
-		new_base = (u32)page_to_va(page_new);
-		copy_page_va(new_base, old_base);
-	}
-
-	/* copy elf memory to new task */
-	list_old = &old_mm->elf_image_list;
-	list_new = &new_mm->elf_image_list;
-	for (i = 0; i < e; i++) {
-		list_old = list_next(list_old);
-		list_new = list_next(list_new);
-		page_old = list_entry(list_old, struct page, pgt_list);
-		page_new = list_entry(list_new, struct page, pgt_list);
-		old_base = (u32)page_to_va(page_old);
-		new_base = (u32)page_to_va(page_new);
-		copy_page_va(new_base, old_base);
-	}
+	debug("task %s stack is 0x%x\n",
+		     task->name, (u32)task->stack_base);
 
 	return 0;
 }
@@ -625,15 +276,34 @@ static int copy_process(struct task_struct *new)
 {
 	struct task_struct *old = new->parent;
 
-	if (old)
+	if (old) {
 		copy_process_memory(old, new);
+	}
 
 	return 0;
 }
 
-static int inline set_up_task_stack(struct task_struct *task, pt_regs *regs)
+static int set_up_task_stack(struct task_struct *task, pt_regs *regs)
 {
-	return arch_set_up_task_stack(task, regs);
+	unsigned long stack_base;
+
+	/*
+	 * in arm, stack is grow from up to down,so we 
+	 * adjust it;
+	 */
+	if (task->stack_base == NULL) {
+		kernel_error("task kernel stack invailed\n");
+		return -EFAULT;
+	}
+
+	task->stack_base = task->stack_origin;
+	task->stack_base += KERNEL_STACK_SIZE;
+	stack_base = task->stack_base;
+
+	stack_base = arch_set_up_task_stack(stack_base, regs);
+	task->stack_base = stack_base;
+
+	return 0;
 }
 
 /*
@@ -644,6 +314,7 @@ static int inline set_up_task_stack(struct task_struct *task, pt_regs *regs)
 int switch_task(struct task_struct *cur,
 		struct task_struct *next)
 {
+#if 0
 	struct list_head *list;
 	struct list_head *head;
 	unsigned long stack_base = PROCESS_USER_STACK_BASE;
@@ -700,103 +371,60 @@ int switch_task(struct task_struct *cur,
 		build_tlb_table_entry(mmap_base, pa, SIZE_NM(4), TLB_ATTR_USER_MEMORY);
 		task_base += SIZE_NM(4);
 	}
-
+#endif
 	return 0;
 }
 
-static int setup_task_argv_envp(struct task_struct *task,
+static int task_setup_argv_envp(struct task_struct *task,
 		char *name, char **argv, char **envp)
 {
-	char *argv_base = (char *)(PROCESS_USER_BASE);
-	int i, length;
-	struct list_head *list = &task->mm_struct.elf_image_list;
-	struct list_head *slist = &task->mm_struct.elf_stack_list;
-	unsigned long load_base;
-	u32 *table_base;
-	int argv_sum = 1;
-	int env_sum = 0;
-
-	if (task->flag & PROCESS_TYPE_KERNEL)
+	if (task_is_kernel(task))
 		return -EINVAL;
 
-	for (i = 0; ; i++) {
-		if (argv[i])
-			argv_sum++;
-		else
-			break;
-	}
-
-	for (i = 0; ; i++) {
-		if (envp[i])
-			env_sum++;
-		else
-			break;
-	}
-
-	/*
-	 * copy the argument to the process memory space
-	 * the argv is stored at the first page of the
-	 * task memory space. argv_base is user space base
-	 * address and load base is kernel space address.
-	 */
-	list = list_next(list);
-	slist = list_next(slist);
-	load_base = page_to_va(list_entry(list, struct page, plist));
-	/* adjust the stack base, arm is up to down */
-	table_base = (u32 *)(page_to_va(list_entry(slist, struct page, plist)) + PAGE_SIZE);
-	table_base = table_base - (argv_sum + env_sum + 1);
-
-	*table_base = argv_sum;
-	table_base++;
-
-	/* copy name */
-	length = strlen(name);
-	strcpy((char *)load_base, name);
-	*table_base = (unsigned long)argv_base;
-	argv_base += length;	/* argv[i] address in userspace */
-	load_base += length;
-	table_base++;
-	argv_base = (char *)baligin((u32)argv_base, 4);
-	load_base = baligin(load_base, 4);
-
-	/* copy argv */
-	for (i = 0; i < argv_sum; i++) {
-		length = strlen(argv[i]);
-		strcpy((char *)load_base, argv[i]);
-		*table_base = (unsigned long)argv_base;
-		argv_base += length;	/* argv[i] address in userspace */
-		load_base += length;
-		table_base++;
-		argv_base = (char *)baligin((u32)argv_base, 4);
-		load_base = baligin(load_base, 4);
-	}
-
-	/* copy envp */
-	for (i = 0; i < env_sum; i++) {
-		length = strlen(envp[i]);
-		strcpy((char *)load_base, argv[i]);
-		*table_base = (unsigned long)argv_base;
-		argv_base += length;	/* argv[i] address in userspace */
-		load_base += length;
-		table_base++;
-		argv_base = (char *)baligin((u32)argv_base, 4);
-		load_base = baligin(load_base, 4);
-	}
-
-	return (argv_sum + env_sum + 1) * sizeof(unsigned long);
+	return task_mm_setup_argv_envp(&task->mm_struct, name, argv, envp);
 }
 
-struct task_struct *fork_new_task(char *name, u32 user_sp, u32 flag)
+static struct task_struct *allocate_task(char *name)
+{
+	struct task_struct *task = NULL;
+	int pages = page_nr(sizeof(struct task_struct));
+	int name_size = 0;
+
+	/* 
+	 * each task allocate pages size, so need to check
+	 * the size of struct task_struct, but now seems
+	 * it will take one page for each task
+	 */
+	task = (struct task_struct *)get_free_pages(pages, GFP_KERNEL);
+	if (!task)
+		return NULL;
+
+	memset(task, 0, PAGE_SIZE * pages);
+
+	/* set the name of the task usually the bin path */
+	if (name) {
+		name_size = strlen(name);
+		name_size = MIN(name_size, PROCESS_NAME_SIZE);
+		strncpy(task->name, name, name_size);
+	}
+
+	return task;
+}
+
+static inline void free_task(struct task_struct *task)
+{
+	if (task)
+		free_pages((void *)task);
+}
+
+struct task_struct *alloc_and_init_task(char *name, int flag)
 {
 	struct task_struct *new;
 	int ret = 0;
 
-	debug("Ready to fork a new task %s\n", name);
-	new = kmalloc(sizeof(struct task_struct), GFP_KERNEL);
-	if (new == NULL) {
-		kernel_error("can not allcate memory for new task\n");
+	new = allocate_task(name);
+	if (!new)
 		return NULL;
-	}
 
 	ret = init_task_struct(new, flag);
 	if (ret) {
@@ -804,53 +432,36 @@ struct task_struct *fork_new_task(char *name, u32 user_sp, u32 flag)
 		goto exit;
 	}
 
-	/*
-	 * before init mm_struct and sched_struct.
-	 * the parent process must be ensure.
-	 */
-	init_mm_struct(new, user_sp);
 	init_sched_struct(new);
 	init_signal_struct(new);
 
-	if (name)
-		strncpy(new->name, name, PROCESS_NAME_SIZE);
+	if (init_mm_struct(new))
+		goto exit;
+
+	if (alloc_kernel_stack(new))
+		goto exit;
 
 	debug("Task: name:%s, prio:%d, pid:%d\n",
 		     new->name, new->prio, new->pid);
-
-	/* allocate page table and memory for task */
-	ret = alloc_memory_for_task(new);
-	if (ret) {
-		kernel_error("allocate memory for task failed\n");
-		goto exit;
-	}
+	return new;
 
 exit:
-	if (ret) {
-		kfree(new);
-		new = NULL;
-	}
-
-	return new;
+	free_task(new);
+	return NULL;
 }
 
-int do_fork(char *name, pt_regs *regs, u32 user_sp, u32 flag)
+int do_fork(char *name, pt_regs *regs, int flag)
 {
 	struct task_struct *new;
 
 	/* get a new task_struct instance */
-	new = fork_new_task(name, user_sp, flag);
+	new = alloc_and_init_task(name, flag);
 	if (!new) {
 		kernel_error("fork new task failed\n");
 		return -ENOMEM;
 	}
 
-	/*
-	 * if the task is a kernel task, or the task is
-	 * forked by a kernel task,we do not need to copy
-	 * process to it
-	 */
-	if (flag & PROCESS_TYPE_USER)
+	if (task_is_user(new))
 		copy_process(new);
 
 	set_up_task_stack(new, regs);
@@ -876,7 +487,7 @@ int kthread_run(char *name, int (*fn)(void *arg), void *arg)
 	flag |= PROCESS_TYPE_KERNEL;	
 	init_pt_regs(&regs, (void *)fn, arg);
 
-	return do_fork(name, &regs, 0, flag);
+	return do_fork(name, &regs, flag);
 }
 
 void release_task(struct task_struct *task)
@@ -891,6 +502,7 @@ int load_elf_section(struct elf_section *section,
 		     struct file *file,
 		     struct mm_struct *mm)
 {
+#if 0
 	struct list_head *list = &mm->elf_image_list;
 	struct page *page = NULL;
 	int i, j, k;
@@ -946,7 +558,7 @@ int load_elf_section(struct elf_section *section,
 		j = 0;
 		list = list_next(list);
 	} while (k > 0);
-	
+#endif	
 	return 0;
 }
 
@@ -954,8 +566,9 @@ int load_elf_image(struct task_struct *task,
 		   struct file *file,
 		   struct elf_file *elf)
 {
-	struct mm_struct *mm = &task->mm_struct;
-	struct elf_section *section = elf->head;
+#if 0
+	struct mm_struct *mm;
+	struct elf_section *section;
 	int ret = 0;
 
 	if (!task || !file || !elf)
@@ -965,12 +578,12 @@ int load_elf_image(struct task_struct *task,
 	mm->elf_size = 0;
 
 	/* load each section to memory */
-	for ( ; section != NULL; section = section->next) {
+	for ( ; section != NULL; section) {
 		ret = load_elf_section(section, file, mm);
 		if (ret)
 			return ret;
 	}
-
+#endif
 	return 0;
 }
 
@@ -1069,33 +682,23 @@ int do_exec(char __user *name,
 		 * becase kernel process has not allocat page
 		 * table and mm_struct.
 		 */
-		new = fork_new_task(name, PROCESS_USER_STACK_BASE, PROCESS_TYPE_USER);
+		new = alloc_and_init_task(name, PROCESS_TYPE_USER);
 		if (!new) {
 			debug("can not fork new process when exec\n");
 			return -ENOMEM;
 		}
 	} 
 	else {
+		/* need reinit the mm_struct */
 		new = current;
 		strncpy(new->name, name, PROCESS_NAME_SIZE);
 	}
 
-	file = kernel_open(name, O_RDONLY);
-	if (!file) {
-		kernel_error("No such file %s\n", name);
-		err = -ENOENT;
-		goto err_open_file;
-	}
-
-	elf = get_elf_info(file);
-	if (!elf) {
-		err = -EINVAL;
-		goto exit;
-	}
-
-	/* must befor load_elf_image, since the memory
-	 * will be overwrited by it */
-	ae_size = setup_task_argv_envp(new, name, argv, envp);
+	/* 
+	 * must befor load_elf_image, since the memory
+	 * will be overwrited by it
+	 */
+	ae_size = task_setup_argv_envp(new, name, argv, envp);
 	copy_sigreturn_code(new);
 
 	/*
@@ -1126,10 +729,8 @@ int do_exec(char __user *name,
 
 release_elf_file:
 	release_elf_file(elf);
-exit:
 	kernel_close(file);
 
-err_open_file:
 	if(err && (current->flag & PROCESS_TYPE_KERNEL)) {
 		release_task(new);
 	}
@@ -1150,16 +751,15 @@ int kernel_exec(char *filename)
 		       (char __user **)init_envp, &regs);
 }
 
+
 int build_idle_task(void)
 {
-	idle = kmalloc(sizeof(struct task_struct), GFP_KERNEL);
-	if (idle == NULL)
+	idle = allocate_task("idle");
+	if (!idle)
 		return -ENOMEM;
 
 	idle->pid = -1;
 	idle->uid = 0;
-
-	strncpy(idle->name, "idle", PROCESS_NAME_SIZE);
 	idle->flag = 0 | PROCESS_TYPE_KERNEL;
 
 	idle->parent = NULL;
@@ -1169,6 +769,7 @@ int build_idle_task(void)
 
 	init_sched_struct(idle);
 	idle->state = PROCESS_STATE_RUNNING;
+
 	/* update current and next_run to idle task */
 	current = idle;
 	next_run = idle;
