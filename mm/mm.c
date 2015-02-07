@@ -1,3 +1,10 @@
+/*
+ * mm/mm.c
+ *
+ * Created by Le Min (lemin9538@163.com)
+ *
+ */
+
 #include <os/mm.h>
 #include <os/string.h>
 #include <os/init.h>
@@ -5,9 +12,29 @@
 #include <os/mmu.h>
 #include <os/kernel.h>
 #include <os/panic.h>
+#include <os/soc.h>
 #include "memory_map.h"
 
 #define ZONE_MAX_SECTION	4
+
+typedef enum __mm_zone_t {
+	MM_ZONE_NORMAL = NORMAL_MEM,
+	MM_ZONE_DMA = DMA_MEM,
+	MM_ZONE_RES = RES_MEM,
+#define MM_ZONE_MASK		0x3
+#define UNKNOWN_MEM		3
+	MM_ZONE_UNKNOWN = UNKNOWN_MEM,
+} mm_zone_t;
+
+#ifdef DEBUG_MM
+#define mm_debug(fmt, ...)	pr_debug("[  mm:  ] ", fmt,##__VA_ARGS__)
+#define mm_info(fmt, ...)	pr_info("[  mm:  ] ", fmt,##__VA_ARGS__)
+#define mm_error(fmt, ...)	pr_error("[  mm:  ] ", fmt,##__VA_ARGS__)
+#else
+#define mm_debug(fmt, ...)
+#define mm_info(fmt, ...)
+#define mm_error(fmt, ...)
+#endif
 
 /*
  * mm_section represent a memory section in the platform
@@ -609,7 +636,11 @@ static inline struct mm_section *va_get_section(unsigned long va)
 	int i = 0;
 	struct mm_section *section;
 
-	while (section = section_table[i]) {
+	while (1) {
+		section = section_table[i];
+		if (!section)
+			break;
+
 		if ((va >= section->vir_start) &&
 			(va < (section->vir_start + section->size)))
 			break;
@@ -624,7 +655,11 @@ static inline struct mm_section *pa_get_section(unsigned long pa)
 	int i = 0;
 	struct mm_section *section;
 
-	while (section = section_table[i]) {
+	while (1) {
+		section = section_table[i];
+		if(!section)
+			break;
+
 		if ((pa >= section->phy_start) &&
 			(pa < (section->phy_start + section->size)))
 			break;
@@ -827,12 +862,12 @@ struct page *request_pages(int count, int flag)
 	return (struct page *)__get_free_pages(count, flag, 0);
 }
 
-void *get_free_pages(int count, unsigned long flag)
+void *get_free_pages(int count, int flag)
 {
 	if (count <= 0)
 		return NULL;
 
-	return __get_free_pages(count, flag, 1);
+	return (void *)__get_free_pages(count, flag, 1);
 }
 
 void update_bm_current(struct mm_section *section)
@@ -1035,12 +1070,18 @@ struct page *get_free_page_match(unsigned long match, int flag)
 	return __request_special_pages(1, match, flag, 1);
 }
 
-void copy_page_va(u32 target, u32 source)
+void page_add_to_list_tail(struct page *page,
+		struct list_head *head)
+{
+	list_add_tail(head, &page->plist);
+}
+
+void copy_page_va(unsigned long target, unsigned long source)
 {
 	memcpy((char *)target, (char *)source, PAGE_SIZE);
 }
 
-void copy_page_pa(u32 target,u32 source)
+void copy_page_pa(unsigned long target, unsigned long source)
 {
 	copy_page_va(pa_to_va(target), pa_to_va(source));
 }

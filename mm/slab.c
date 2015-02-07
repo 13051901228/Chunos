@@ -1,7 +1,15 @@
+/*
+ * mm/slab.c
+ *
+ * Created by Le Min (lemin9538@163.com)
+ */
+
 #include <os/slab.h>
 #include <os/mm.h>
 #include <os/string.h>
 #include <os/kernel.h>
+
+#define SLAB_CACHE_SIZE	(1 * 1024 * 1024)
 
 #ifdef	DEBUG_SLAB
 #define debug(fmt, ...)	kernel_debug(fmt, ##__VA_ARGS__)
@@ -12,344 +20,303 @@
 /* 
  * each allocted memory called by kmalloc has a header named
  * size: size of this allocated memory
- * slab_list: connect to the slab free list which
- * in his size
+ * next: list to the nest slab which in same size
  */
+struct slab_header;
+
 struct slab_header {
-	u32 magic;
-	int size;
-	struct list_head slab_list;
-};
-
-#define SLAB_HEADER_SIZE	sizeof(struct slab_header)
-#define SLAB_MIN		16
-#define SLAB_STEP		16
-#define SLAB_NODE		((PAGE_SIZE - SLAB_HEADER_SIZE) / SLAB_MIN)
-#define SLAB_MAX		(SLAB_NODE * SLAB_STEP)
-
-#define SLAB_HEADER_MAGIC	0xabcdabcd
-#define SLAB_POOL_MAX_PAGE	((SLAB_MAX_SIZE * 1024 * 1024) >> PAGE_SHIFT)
-
-#define header_to_base(header)	((void *)((unsigned long)header + SLAB_HEADER_SIZE))
-#define base_to_header(base)	(struct slab_header *)((unsigned long)base - SLAB_HEADER_SIZE)
-
-#define list_id(size)		((size >> 4) -1)
+	size_t size;
+	union {
+		u32 magic;
+		struct slab_header *next;
+	};
+} __attribute__((packed));
 
 /*
- * repersent a slab memory pool in system
- * current: page that used to allocate new memory just now.
- * list: memory cache list
+ * slab pool store the slab memory which has the
+ * same size
  */
+struct slab_pool {
+	size_t size;
+	struct slab_header *head;
+	int nr;
+};
+
 struct slab {
+	struct list_head plist;
+	struct slab_pool *pool;
 	struct mutex slab_mutex;
-	struct page *slab_page_current;
-	struct list_head list[SLAB_NODE];
-	int page_nr;
+	int pool_nr;
+
+	unsigned long slab_free;
+	int free_size;
+	size_t alloc_size;
+	int alloc_pages;
 };
 
 static struct slab slab;
 static struct slab *pslab = &slab;
 
-static inline int get_new_alloc_size(int size)
+static struct slab_pool slab_pool[] = {
+	{16, 	NULL, 0},
+	{32, 	NULL, 0},
+	{48, 	NULL, 0},
+	{64, 	NULL, 0},
+	{80, 	NULL, 0},
+	{96, 	NULL, 0},
+	{112, 	NULL, 0},
+	{128, 	NULL, 0},
+	{144, 	NULL, 0},
+	{160, 	NULL, 0},
+	{176, 	NULL, 0},
+	{192, 	NULL, 0},
+	{208, 	NULL, 0},
+	{224, 	NULL, 0},
+	{240, 	NULL, 0},
+	{256, 	NULL, 0},
+	{272, 	NULL, 0},
+	{288, 	NULL, 0},
+	{304, 	NULL, 0},
+	{320, 	NULL, 0},
+	{336, 	NULL, 0},
+	{352, 	NULL, 0},
+	{368, 	NULL, 0},
+	{384, 	NULL, 0},
+	{400, 	NULL, 0},
+	{416, 	NULL, 0},
+	{432, 	NULL, 0},
+	{448, 	NULL, 0},
+	{464, 	NULL, 0},
+	{480, 	NULL, 0},
+	{496, 	NULL, 0},
+	{512, 	NULL, 0},
+	{0, 	NULL, 0}		/* size > 512 will store here */
+};
+
+#define SLAB_HEADER_SIZE	(sizeof(struct slab_header))
+#define SLAB_MAGIC	(0x1234abcd)
+#define header_to_base(header)	((void *)((unsigned long)header + SLAB_HEADER_SIZE))
+#define base_to_header(base)	(struct slab_header *)((unsigned long)base - SLAB_HEADER_SIZE)
+#define SLAB_SIZE(size)		((size) + SLAB_HEADER_SIZE)
+
+static int get_slab_alloc_size(int size)
 {
-	return baligin(size, SLAB_STEP) + SLAB_HEADER_SIZE;
+	/* this pool is aligned in 16 now*/
+	return align(size, pslab->pool[0].size);
 }
 
-static inline void add_slab_to_page(struct page *pg, struct slab_header *header)
+static inline int slab_pool_id(int size)
 {
-	if (header && pg)
-		list_add(&pg->slab_list, &header->slab_list);
+	int id = size / pslab->pool[0].size - 1;
+
+	return id >= pslab->pool_nr ? (pslab->pool_nr - 1) : id;
 }
 
-static void add_slab_to_list(struct slab_header *header)
+static int alloc_new_slab_cache(size_t size)
 {
-	struct list_head *list;
+	int nr = page_nr(size);
 
-	if (header) {
-		list = &pslab->list[list_id(header->size)];
-		list_add(list, &header->slab_list);
-	}
+	/*
+	 * when system booting up, allocate one big cache for
+	 * slab allocater, if the pool is used out, then one
+	 * page one time. and the max size kmalloc can get is
+	 * PAGE_SIZE
+	 */
+	mutex_lock(&pslab->slab_mutex);
+	pslab->slab_free = (unsigned long)get_free_pages(nr, GFP_SLAB);
+	if (!pslab->slab_free)
+		return -ENOMEM;
+
+	page_add_to_list_tail(va_to_page(pslab->slab_free), &pslab->plist);
+	pslab->free_size = nr << PAGE_SHIFT;
+	pslab->alloc_size += nr << PAGE_SHIFT;
+	pslab->alloc_pages += nr;
+	mutex_unlock(&pslab->slab_mutex);
+
+	return 0;
 }
 
-static void init_slab_header(struct slab_header *header, int size)
+struct slab_header *get_slab_from_slab_pool(struct slab_pool *slab_pool)
 {
-	header->magic = SLAB_HEADER_MAGIC;
-	header->size = size - SLAB_HEADER_SIZE;
-	init_list(&header->slab_list);
-}
+	struct slab_header *header;
 
-void inline remove_slab_from_list(struct slab_header *header)
-{
-	if (header)
-		list_del(&header->slab_list);
-}
+	header = slab_pool->head;
+	slab_pool->head = header->next;
+	header->magic = SLAB_MAGIC;
 
-void inline remove_slab_from_page(struct slab_header *header)
-{
-	if (header)
-		list_del(&header->slab_list);
-}
-
-static struct slab_header *get_slab_from_page(struct page *pg, int size)
-{
-	struct slab_header *header = NULL;
-	size_t free_size = get_page_free_size(pg);
-	unsigned long free_base = get_page_free_base(pg);
-
-	if (free_size >= size) {
-		header = (struct slab_header *)free_base;
-		init_slab_header(header, size);
-		update_page(pg, free_base + size, free_size - size);
-	}
-	
 	return header;
 }
 
-/*
- * when need to update the current free page of slab
- * we compare the size of this two pages,and biger ones
- * will be the current free page.
- */
-static void update_slab_free_page(struct page *pg)
+void add_slab_to_slab_pool(struct slab_header *header,
+		struct slab_pool *slab_pool)
 {
-	struct page *current_pg = pslab->slab_page_current;
-	struct page *new = NULL;
-	struct page *old = NULL;
-	struct slab_header *header = NULL;
-	int size;
-	size_t free_size;
-
-	if (current_pg == NULL) {
-		new = pg;
-		old = NULL;
-	} else if (pg->free_size > current_pg->free_size) {
-		new = pg;
-		old = current_pg;
-	} else {
-		new = current_pg;
-		old = pg;
-	}
-
-	pslab->slab_page_current = new;
-
-	if (!old)
-		return;
-
-	free_size = get_page_free_size(old);
-	if (free_size > (SLAB_MIN + SLAB_HEADER_SIZE)) {
-		size = min_aligin(free_size - SLAB_HEADER_SIZE, SLAB_STEP);
-		header = get_slab_from_page(old, size + SLAB_HEADER_SIZE);
-		add_slab_to_list(header);
-	}
+	header->next = slab_pool->head;
+	slab_pool->head	= header;
 }
 
 /* find memory from slab cache list */
-static void *get_slab_in_list(int size, unsigned long flag)
+static void *get_slab_from_pool(int size, int flag)
 {
-	struct list_head *list;
+	struct slab_pool *slab_pool;
 	struct slab_header *header;
-	struct page *pg;
-	int id = list_id(size);
+	int id = slab_pool_id(size);
 	
-	if (!(flag & GFP_KERNEL))
+	mutex_lock(&pslab->slab_mutex);
+
+	slab_pool = &pslab->pool[id];
+	if (slab_pool->head) {
+		mutex_unlock(&pslab->slab_mutex);
 		return NULL;
-
-	list = &pslab->list[id];
-	list = list_next(list);
-repet:
-	if (is_list_empty(list)) {
-		/*
-		 * if the slab has the max memeory size, we search
-		 * an appropriate memeory from next id list.
-		 */
-		if (pslab->page_nr >= SLAB_POOL_MAX_PAGE) {
-			id ++;
-			if (id == SLAB_NODE)
-				return NULL;
-			list = &pslab->list[id];
-			list = list_next(list);
-
-			goto repet;
-		}
-		else
-			return NULL;
 	}
 
 	/* get the slab_header to find the free memory */
-	header = list_entry(list, struct slab_header, slab_list);
-	pg = va_to_page((unsigned long)header);
-#if 0
-	/* check whether the page has been released. */
-	if (!page_state(va_to_page_id((unsigned long)header)) ||
-		!(pg->flag & __GFP_SLAB)) {
-		kernel_warning("page has been released 0x%x\n",
-			      (u32)header + SLAB_HEADER_SIZE);
-		list = list_next(list);
-		remove_slab_from_list(header);
-		goto repet;
-	}
-#endif
-	/*
-	 * update the page information delete slab from
-	 * cache list add slab to page list
-	 */
-	remove_slab_from_list(header);
-	add_slab_to_page(pg, header);
-
-	debug("get slab in list id %d addr 0x%x\n",
-		      list_id(size), (u32)header_to_base(header));
+	header = get_slab_from_slab_pool(slab_pool);
+	mutex_unlock(&pslab->slab_mutex);
 
 	return header_to_base(header);
 }
 
 
-static void *get_slab_from_page_free(int size, unsigned long flag)
+static void *get_slab_from_slab_free(int size, int flag)
 {
-	struct page *pg;
 	struct slab_header *header;
-	size_t new_size = get_new_alloc_size(size);
-
-	pg = pslab->slab_page_current;
-	if (pg == NULL)
-		return NULL;
-#if 0
-	/* If the page has been released, we need a new page */
-	if (!page_state(page_to_page_id(pg))) {
-		pslab->slab_page_current = NULL;
-		return NULL;
-	}
-#endif
-	if (new_size > get_page_free_size(pg))
-		return NULL;
-
-	header = get_slab_from_page(pg, new_size);
-	add_slab_to_page(pg, header);
-	debug("get memory from current free page 0x%x\n",
-		      (u32)header_to_base(header));
-
-	return header_to_base(header);
-}
-
-static void *get_kernel_slab(int size, unsigned long flag)
-{
-	int count;
-	unsigned long base, endp;
-	struct page *pg;
-	int leave_size = 0;
-	struct slab_header *header;
-	size_t new_size = get_new_alloc_size(size);
-
-	if (pslab->page_nr >= SLAB_POOL_MAX_PAGE) {
-		kernel_error("No enough memory in slab pool\n");
-		return NULL;
-	}
-
-	if (is_aligin(size, PAGE_SIZE) || is_aligin(new_size, PAGE_SIZE)) {
-		base = (unsigned long)get_free_pages(page_nr(size), flag);
-		if (!base)
-			return NULL;
-		pg = va_to_page(base);
-		set_page_extra_size(pg, 0);
-		return (void *)base;
-	}
-
-	count = page_nr(size);
-	leave_size = size - (count - 1) * PAGE_SIZE;
-	leave_size = get_new_alloc_size(leave_size);
-
-	base = (unsigned long )get_free_pages(count, flag);
-	if (!base) {
-		mm_error("get memory faile at get_kernel_slab\n");
-		return NULL;
-	}
-
-	endp = base + (count - 1) * PAGE_SIZE;
-
-	/*
-	 * first we need modify the information of the full page;
-	 * for the header page, we override the free_base scope
-	 * to record how many slice has been allocated.
-	 */
-	if (count > 1) {
-		pg = va_to_page(base);
-		set_page_count(pg, count - 1);
-		set_page_extra_size(pg, leave_size);
-	}
-
-	/* now we modify the last page information */
-	pg = va_to_page(endp);
-	set_page_flag(pg, __GFP_SLAB);
-
-	/*
-	 * the last page was used as SLAB memory,so we need
-	 * sub the conter. since the result is base so we
-	 * ingrion the return value. at last we need update
-	 * the slab's current free page
-	 */
-	pslab->page_nr += count;
-
-	if (count <= 1) {
-		header = get_slab_from_page(pg, leave_size);
-		add_slab_to_page(pg, header);
-		debug("get memory from new slab 0x%x\n",
-			      (u32)header_to_base(header));
-		update_slab_free_page(pg);
-		return header_to_base(header);
-	}
-	else {
-		unsigned long free_base = get_page_free_base(pg);
-		size_t free_size = get_page_free_size(pg);
-		update_page(pg, free_base + leave_size, free_size - leave_size);
-		update_slab_free_page(pg);
-		return (void *)base;
-	}
-}
-
-static void *get_new_slab(int size, unsigned long flag)
-{
-	/* if ned dma or res memory, return pages to user */
-	if (flag == GFP_DMA || flag == GFP_RES)
-		return get_free_pages(page_nr(size), flag);
-
-	return get_kernel_slab(size, flag);
-}
-
-static void *__kmalloc(int size, unsigned long flag)
-{
-	void *ret = NULL;
-	size = baligin(size, SLAB_STEP);
 
 	mutex_lock(&pslab->slab_mutex);
 
-	if (flag == GFP_DMA ||
-	    flag == GFP_RES ||
-	    size >= PAGE_SIZE) {
-		goto new_slab;
+	header = (struct slab_header *)pslab->slab_free;
+	if (pslab->free_size < SLAB_SIZE(size))
+		return NULL;
+
+	memset((void *)header, 0, sizeof(struct slab_header));
+	header->size = size;
+	header->magic = SLAB_MAGIC;
+
+	/*
+	 * if the free size < min_slab_size
+	 */
+	pslab->slab_free += SLAB_SIZE(size);
+	pslab->free_size -= SLAB_SIZE(size);
+	if (pslab->free_size < SLAB_SIZE(pslab->pool[0].size)) {
+		header->size += pslab->free_size;
+		pslab->slab_free = 0;
+		pslab->free_size = 0;
 	}
 
-	/* first we find slab in cache list */
-	ret = get_slab_in_list(size, flag);
-	if (ret)
-		goto exit;
-	
-	/*
-	 * cache list does not cotain the memory we needed
-	 * get memory from current free page;
-	 */
-	ret = get_slab_from_page_free(size, flag);
-	if (ret)
-		goto exit;
-	
-	/* finally we need the allocater allocte a new slab */
-new_slab:
-	ret = get_new_slab(size, flag);
+	return header_to_base(header);
+}
 
-exit:
+static void *__get_new_slab(int size, int flag)
+{
+	int id;
+	struct slab_pool *pool;
+	struct slab_header *header;
+
+	/*
+	 * first need to check the free size of
+	 * current slab_cache
+	 */
+
+	mutex_lock(&pslab->slab_mutex);
+	if (pslab->free_size >= SLAB_SIZE(pslab->pool[0].size)) {
+		id = slab_pool_id(pslab->free_size -
+				SLAB_HEADER_SIZE);
+		pool = &pslab->pool[id];
+		header = (struct slab_header *)pslab->slab_free;
+		memset((void *)header, 0, SLAB_HEADER_SIZE);
+		header->size = pslab->free_size - SLAB_HEADER_SIZE;
+		header->magic = SLAB_MAGIC;
+		add_slab_to_slab_pool(header, pool);
+
+		pslab->free_size = 0;
+		pslab->slab_free = 0;
+	}
 	mutex_unlock(&pslab->slab_mutex);
+
+	if (alloc_new_slab_cache(PAGE_SIZE))
+		return NULL;
+
+	return get_slab_from_slab_free(size, flag);
+}
+
+static void *get_new_slab(int size, int flag)
+{
+	/* if ned dma or res memory, return pages to user */
+	if (flag == GFP_DMA || flag == GFP_RES || size >= PAGE_SIZE)
+		return get_free_pages(page_nr(size), flag);
+
+	return __get_new_slab(size, flag);
+}
+
+static void *get_big_slab(int size, int flag)
+{
+	struct slab_pool *slab_pool;
+	struct slab_header *header;
+	int id = slab_pool_id(size);
+
+	mutex_lock(&pslab->slab_mutex);
+
+	/*
+	 * if the pool has no buffer then search
+	 * in the next size pool when the free size
+	 * of this pool is not enough
+	 */
+	while (1) {
+		slab_pool = &pslab->pool[id];
+		if ((!slab_pool->head)) {
+			id ++;
+			if (id == pslab->pool_nr)
+				return NULL;
+		} else {
+			break;
+		}
+	}
+
+	/* get the slab_header to find the free memory */
+	header = (struct slab_header *)
+		get_slab_from_slab_pool(slab_pool);
+
+	mutex_unlock(&pslab->slab_mutex);
+
+	return header_to_base(header);
+}
+
+typedef void *(*slab_alloc_func)(int size, int flag);
+
+static void *__kmalloc(int size, int flag)
+{
+	int i;
+	void *ret = NULL;
+	slab_alloc_func func;
+
+	static slab_alloc_func alloc_func[] = {
+		get_slab_from_pool,
+		get_slab_from_slab_free,
+		get_new_slab,
+		get_big_slab,
+		NULL,
+	};
+
+	size = get_slab_alloc_size(size);
+
+	if ((flag != GFP_KERNEL) || (size >= PAGE_SIZE))
+		return get_new_slab(size, flag);
+
+	while (1) {
+		func = alloc_func[i];
+		if (!func)
+			break;
+
+		ret = func(size, flag);
+		if (ret)
+			break;
+
+		i ++;
+	}
+
 	return ret;
 }
 
-void *kmalloc(int size, unsigned long flag)
+void *kmalloc(int size, int flag)
 {
 	if (size <= 0)
 		return NULL;
@@ -362,7 +329,7 @@ void *kmalloc(int size, unsigned long flag)
 	return __kmalloc(size, flag);
 }
 
-void *kzalloc(int size,unsigned long flag)
+void *kzalloc(int size, int flag)
 {
 	char *ret;
 
@@ -372,88 +339,37 @@ void *kzalloc(int size,unsigned long flag)
 	return (void *)ret;
 }
 
-static void free_slice_slab(void *addr)
-{
-	struct page *pg;
-	struct slab_header *header;
-
-	pg = va_to_page((unsigned long)addr);
-	header = base_to_header(addr);
-
-	if (header->magic != SLAB_HEADER_MAGIC) {
-		kernel_error("free a memory which not allcated by kmalloc()\n");
-		return;
-	}
-
-	remove_slab_from_page(header);
-	add_slab_to_list(header);
-}
-
-static void free_page_slab(void *addr)
-{
-	struct page *last_page;
-	struct page *pg = va_to_page((unsigned long)addr);
-	int count = get_page_count(pg);
-	int size = get_page_extra_size(pg);
-	struct slab_header *header;
-
-	last_page = pg + count;
-	free_pages(addr);
-	pslab->page_nr -= count;
-
-	if (size) {
-		/*
-		 * if __GFP_SLAB is not set, it means this page is allocated
-		 * using get_free_pages or get_free_page
-		 */
-		if (!(get_page_flag(last_page) & __GFP_SLAB))
-			return;
-		header = (struct slab_header *)page_to_va(last_page);
-		init_slab_header(header, size);
-		free_slice_slab(header_to_base(header));
-	}
-}
-
 void kfree(void *addr)
 {
-	struct page *pg;
-	unsigned long flag;
+	struct slab_header *header;
+	struct slab_pool *slab_pool;
 
 	if (!addr)
 		return;
 
-	mm_debug("kfree free address is 0x%x\n", (u32)addr);
+	debug("kfree free address is 0x%x\n", (unsigned long)addr);
 	mutex_lock(&pslab->slab_mutex);
-
-	pg = va_to_page((unsigned long)addr);
-	flag = get_page_flag(pg);
-
-	if ((flag & GFP_DMA) || (flag & GFP_RES))
-		return free_pages(addr);
-
-	if (flag & __GFP_SLAB)
-		free_slice_slab(addr);
-	else {
-		if (!is_aligin((unsigned long)addr, PAGE_SIZE))
-			return;
-
-		free_page_slab(addr);
+	header = base_to_header(addr);
+	if (header->magic != SLAB_MAGIC) {
+		free_pages(addr);
+		goto out;
 	}
 
+	slab_pool = &pslab->pool[slab_pool_id(header->size)];
+	add_slab_to_slab_pool(header, slab_pool);
+
+out:
 	mutex_unlock(&pslab->slab_mutex);
 }
 
+
 int slab_init(void)
 {
-	int i;
-
-	mm_info("Slab allocter init\n");
-
-	for (i = 0; i < SLAB_NODE; i++)
-		init_list(&pslab->list[i]);
-
+	memset((char *)pslab, 0, sizeof(struct slab));
+	init_list(&pslab->plist);
+	pslab->pool = slab_pool;
+	pslab->pool_nr = ARRAY_SIZE(slab_pool);
 	init_mutex(&pslab->slab_mutex);
-	pslab->page_nr = 0;
 
-	return 0;
+	return alloc_new_slab_cache(SLAB_CACHE_SIZE);
 }

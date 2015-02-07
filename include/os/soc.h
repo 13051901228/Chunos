@@ -1,3 +1,10 @@
+/*
+ * include/os/soc.h
+ *
+ * Created by Le Min(lemin9538@163.com)
+ *
+ */
+
 #ifndef _SOC_H_
 #define _SOC_H_
 
@@ -6,6 +13,10 @@
 #include <os/mmu.h>
 
 #define MEM_MAX_REGION	16
+
+#define NORMAL_MEM		0
+#define DMA_MEM			1
+#define RES_MEM			2
 
 struct memory_region {
 	u32 start;

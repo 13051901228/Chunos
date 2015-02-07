@@ -11,7 +11,7 @@ typedef char *va_list;
  */
 
 #define addr(n)		(&n)
-#define offset(n)	((sizeof(n) + sizeof(int) - 1) & ~(sizeof(int) - 1))
+#define offset(n)	((sizeof(n) + sizeof(unsigned long) - 1) & ~(sizeof(unsigned long) - 1))
 #define va_start(ap,n)  ap = (char *)addr(n) + offset(n)
 #define va_end(ap)	(void)0
 #define va_arg(ap,type) (*(type *)((ap += offset(type)) - offset(type)))

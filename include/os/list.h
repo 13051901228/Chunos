@@ -28,7 +28,8 @@ static void inline list_add(struct list_head *head,
 	head->next = new;
 }
 
-static void inline list_add_tail(struct list_head *head,struct list_head *new)
+static void inline list_add_tail(struct list_head *head,
+		struct list_head *new)
 {
 	head->pre->next = new;
 	new->next = head;
