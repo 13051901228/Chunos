@@ -785,6 +785,11 @@ static unsigned long get_free_pages_from_section(struct mm_section *section,
 		return 0;
 	}
 
+	/* 
+	 * need check whether the memory is areadly maped
+	 * or not [TBD]
+	 */
+
 	/*
 	 * set the releated bit in bitmap
 	 * in case of other process read these bit
@@ -1070,10 +1075,31 @@ struct page *get_free_page_match(unsigned long match, int flag)
 	return __request_special_pages(1, match, flag, 1);
 }
 
-void page_add_to_list_tail(struct page *page,
+void inline add_page_to_list_tail(struct page *page,
 		struct list_head *head)
 {
 	list_add_tail(head, &page->plist);
+}
+
+void inline del_page_from_list(struct page *page)
+{
+	list_del(&page->plist);
+}
+
+void free_pages_on_list(struct list_head *head)
+{
+	struct list_head *list;
+	struct page *page;
+
+	list_for_each(head, list) {
+		page = list_entry(list, struct page, plist);
+		release_page(page);
+	}
+}
+
+inline struct page *list_to_page(struct list_head *list)
+{
+	return list_entry(list, struct page, plist);
 }
 
 void copy_page_va(unsigned long target, unsigned long source)

@@ -127,7 +127,7 @@ static int alloc_new_slab_cache(size_t size)
 	if (!pslab->slab_free)
 		return -ENOMEM;
 
-	page_add_to_list_tail(va_to_page(pslab->slab_free), &pslab->plist);
+	add_page_to_list_tail(va_to_page(pslab->slab_free), &pslab->plist);
 	pslab->free_size = nr << PAGE_SHIFT;
 	pslab->alloc_size += nr << PAGE_SHIFT;
 	pslab->alloc_pages += nr;

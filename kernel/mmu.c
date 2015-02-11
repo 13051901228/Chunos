@@ -20,11 +20,6 @@ static struct mmu *mmu;
 
 #define MMU_MAP_SECTION		0
 
-size_t inline mmu_get_pgt_size(void)
-{
-	return mmu->tlb_size;
-}
-
 void clear_tlb_entry(unsigned long va, size_t size)
 {
 	
@@ -66,6 +61,33 @@ int build_kernel_pde_entry(unsigned long vstart,
 	arch_flush_mmu_tlb();
 
 	return 0;
+}
+
+int mmu_create_pde_entry(unsigned long pde_entry_addr,
+		unsigned long pte_base, unsigned long user_addr)
+{
+	return 0;
+}
+
+int mmu_create_pte_entry(unsigned long pte_entry_addr,
+		unsigned long va, unsigned long user_addr)
+{
+	return 0;
+}
+
+unsigned long mmu_get_pde_entry(unsigned long base, unsigned ua)
+{
+	return 0;
+}
+
+size_t inline mmu_get_pgt_size(void)
+{
+	return mmu->tlb_size; 
+}
+
+u32 inline mmu_get_pgt_align(void)
+{
+	return mmu->tlb_align;
 }
 
 int mmu_init(void)

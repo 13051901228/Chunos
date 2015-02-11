@@ -36,6 +36,7 @@ struct mmu_ops {
 
 struct mmu {
 	size_t tlb_size;
+	u32 tlb_align;
 	unsigned long kernel_tlb_base;
 	struct mmu_ops *mmu_ops;
 };
@@ -55,5 +56,18 @@ int build_kernel_pde_entry(unsigned long vstart,
 			  size_t size, u32 flag);
 
 void clear_tlb_entry(unsigned long va, size_t size);
+
+int mmu_create_pde_entry(unsigned long pde_entry_addr,
+		unsigned long pte_base, unsigned long user_addr);
+
+int mmu_create_pte_entry(unsigned long pte_entry_addr,
+		unsigned long va, unsigned long user_addr);
+
+unsigned long mmu_get_pde_entry(unsigned long base, unsigned ua);
+
+size_t mmu_get_pgt_size(void);
+
+
+u32 mmu_get_pgt_align(void);
 
 #endif

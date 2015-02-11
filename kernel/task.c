@@ -391,15 +391,15 @@ static struct task_struct *allocate_task(char *name)
 	int name_size = 0;
 
 	/* 
-	 * each task allocate pages size, so need to check
-	 * the size of struct task_struct, but now seems
+	 * [TBD] each task allocate pages size, so need to
+	 * check the size of struct task_struct, but now seems
 	 * it will take one page for each task
 	 */
 	task = (struct task_struct *)get_free_pages(pages, GFP_KERNEL);
 	if (!task)
 		return NULL;
 
-	memset(task, 0, PAGE_SIZE * pages);
+	memset((char *)task, 0, PAGE_SIZE * pages);
 
 	/* set the name of the task usually the bin path */
 	if (name) {

@@ -76,6 +76,8 @@ void free_pages(void *addr);
 
 void *get_free_pages(int count, int flag);
 
+struct page *request_pages(int count, int flag);
+
 struct page *va_to_page(unsigned long va);
 
 unsigned long pa_to_va(unsigned long pa);
@@ -94,12 +96,16 @@ unsigned long page_to_va(struct page *page);
 
 unsigned long page_to_pa(struct page *page);
 
-struct page *get_free_page_aligin(int nr, u32 aligin, int flag);
+struct page *get_free_pages_align(int nr, u32 aligin, int flag);
 
 struct page *get_free_page_match(unsigned long match, int flag);
 
-void page_add_to_list_tail(struct page *page,
+void add_page_to_list_tail(struct page *page,
 		struct list_head *head);
+
+struct page *list_to_page(struct list_head *list);
+
+void free_pages_on_list(struct list_head *head);
 
 static inline void *get_free_page(unsigned long flag)
 {

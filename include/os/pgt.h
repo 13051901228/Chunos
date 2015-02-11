@@ -21,14 +21,14 @@
  * lvl2_free_base: base address of current lvl2 pgt
  */
 struct task_page_table {
-	unsigned long lvl1_pgt_base;
+	unsigned long pde_base;
 
-	struct list_head lvl2_pgt_list;
-	size_t lvl2_alloc_size;
-	size_t lvl2_free_size;
-	size_t lvl2_current_free;
-	struct list_head *lvl2_current_page;
-	unsigned long lvl2_free_base;
+	struct list_head pte_list;
+	size_t pte_alloc_size;
+	size_t pte_free_size;
+	size_t pte_current_free;
+	struct list_head *pte_current_page;
+	unsigned long pte_free_base;
 };
 
 int map_task_address(struct task_page_table *table,

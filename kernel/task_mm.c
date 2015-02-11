@@ -18,18 +18,6 @@ static size_t init_max_alloc_size[TASK_MM_SECTION_MAX] = {
 	SIZE_1M, SIZE_NK(16), 0
 };
 
-static void free_pages_on_list(struct list_head *head)
-{
-	struct list_head *list;
-	struct page *page;
-
-	list_for_each(head, list) {
-		page = list_entry(list, struct page, plist);
-		list_del(list);
-		release_page(page);
-	}
-}
-
 static void free_task_section_memory(struct task_mm_section *section)
 {
 	int i;
