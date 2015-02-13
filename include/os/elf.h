@@ -123,24 +123,30 @@ typedef struct _section_header {
 #define EV_NUM		2
 
 typedef enum _section_id {
-	SECTION_TEXT,
-	SECTION_DATA,
+	SECTION_TEXT_DATA,
 	SECTION_BSS,
+	SECTION_DYNAMIC,
 	SECTION_MAX
 } section_id;
 
 struct elf_section {
-	char name[32];		/* section id,text data or bss */
 	u32 offset;		/* section offset in the elf file */
 	u32 size;		/* section size */
 	u32 load_addr;		/* load_address to the memory*/
 };
 
+/*
+ * only support static elf binary and suppose
+ * there is no dynamic section so there will be
+ * three section ro, data and bss
+ * 0: ro
+ * 1: data
+ * 2: bss
+ */
 struct elf_file {
-	int section_nr;
 	size_t elf_size;
 	unsigned long entry_point_address;
-	struct elf_section *sections;
+	struct elf_section sections[SECTION_MAX];
 };
 
 void release_elf_file(struct elf_file *file);

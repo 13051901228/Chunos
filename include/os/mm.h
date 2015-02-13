@@ -33,43 +33,38 @@
 #define GFP_SLAB		(__GFP_KERNEL | __GFP_SLAB)
 #define __GFP_MASK		(__GFP_PGT | __GFP_USER | __GFP_SLAB)
 
+struct user_page_attr {
+	unsigned long map_address;
+};
+
+struct slab_page_attr {
+
+};
+
+struct mmap_page_attr {
+
+};
+
 /*
- * page:represent 4k in physical memory
- * virtual_address:virtual address that page maped to 
- * flag:attribute of the page
- * free_base: if page is used as kernel allocation,the free base of page
- * free_size:remain size of this page
- * usage:usage of this page,if 0 page can release.
+ * page: represent 4k in physical memory
+ * phy_address: physic address this page maped to
+ * flag: attribute of the page
+ * count: how many continous page has
+ * attr: specifical page's attribute
  */
 struct page {
 	unsigned long phy_address;
-	u32 flag;
-	/*
-	 * if page used as a pgt then use pgt_list
-	 * if page used as slab elment then use slab_list
-	 */
-	union {
-		struct list_head plist;
-		struct list_head pgt_list;
-		struct list_head slab_list;
-		struct list_head slab_header_list;
-	};
+	unsigned long vir_address;
+	unsigned long flag;
+	struct list_head plist;
+	u32 count : 16;
+	u32 map_type : 1;
 
-	unsigned long free_base;
-
-	/*
-	 *if flag PAGE_FULL the count used to indicate how many 
-	 *continueous pages were alloctated,else if flag PAGE_SLAB
-	 *then free_size indicate how many free size in this page.
-	 */
-	
 	union {
-		u16 free_size;
-		u16 extra_size;
-		u16 mmap_offset;
+		struct user_page_attr user_page_attr;
+		struct slab_page_attr slab_page_attr;
+		struct mmap_page_attr mmap_page_attr;
 	};
-	u8 count;
-	u8 usage;
 } __attribute__((packed));
 
 void free_pages(void *addr);

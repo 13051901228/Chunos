@@ -33,6 +33,11 @@ struct pgt_buffer {
 	spin_lock_t pgt_lock;
 };
 
+struct pgt_map_info {
+	unsigned long vir_base;
+	size_t size;
+};
+
 static struct pgt_buffer pgt_buffer;
 
 static unsigned long alloc_new_pde(void)

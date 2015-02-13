@@ -29,6 +29,9 @@ struct task_page_table {
 	size_t pte_current_free;
 	struct list_head *pte_current_page;
 	unsigned long pte_free_base;
+
+	unsigned long elf_buffer_base;
+	spin_lock_t elf_buffer_lock;
 };
 
 int map_task_address(struct task_page_table *table,

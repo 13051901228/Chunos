@@ -85,6 +85,62 @@ static void copy_mm_section_info(struct mm_struct *c,
 	init_list(&csection->alloc_mem);
 }
 
+static int alloc_user_stack(struct mm_struct *mm)
+{
+	return 0;
+}
+
+int load_elf_image(struct task_struct *task)
+{
+	struct page *page;
+	struct mm_struct *mm = &task->mm_struct;
+	struct task_mm_section *section =
+		&mm->mm_section[TASK_MM_SECTION_RO];
+	size_t load_size;
+	int page_nr, i;
+	struct pgt_map_info map_info;
+	unsigned long offset = 0;
+
+	/* 
+	 * here we load the all size, later will consider
+	 * to load some of it
+	 */
+	load_size = section->section_size;
+	page_nr = page_nr(load_size);
+	page_nr -= section->alloc_pages;
+
+	/*
+	 * if the section already has memory use it then
+	 * alloc left memory for task
+	 */
+	for (i = 0; i < page_nr; i++) {
+		page = request_pages(1, GFP_USER);
+		if (!page)
+			goto out;
+
+		add_page_to_list_tail(page, &section->alloc_mem);
+	}
+
+	list = list_next(&section->alloc_mem);
+
+	while (load_size > 0) {
+		list = pgt_map_elf_buffer(mm, &map_info, list);
+		if (!map_info.size && load_size)
+			goto out;
+
+		load_elf_data(mm->elf_file, map_info->vir_base,
+				map_info->size, offset);
+
+		load_size -= map_info->size;
+		offset += map_info->size;
+	}
+
+	return 0;
+
+out:
+	return -ENOMEM;
+}
+
 int init_mm_struct(struct task_struct *task)
 {
 	struct mm_struct *mm = &task->mm_struct;
@@ -94,12 +150,16 @@ int init_mm_struct(struct task_struct *task)
 	if (task_is_kernel(task))
 		return 0;
 
-	/* if parent is user space we can dup the fd TBD */
+	/*
+	 * if parent is user space we can dup the fd TBD
+	 */
 	mm->file = kernel_open(task->name, O_RDONLY);
 	if (!mm->file)
 		return -ENOENT;
 
-	/* get the elf file's informaiton */
+	/*
+	 * get the elf file's informaiton
+	 */
 	mm->elf_file = dup_elf_info(mmp->elf_file);
 	if (!mm->elf_file) {
 		mm->elf_file = get_elf_info(mm->file);
@@ -113,10 +173,14 @@ int init_mm_struct(struct task_struct *task)
 	 * the information from the parent process.
 	 */
 	for (i = 0; i < TASK_MM_SECTION_MAX; i++) {
-		if (task->flag & PROCESS_FLAG_EXEC)
+		if (task->flag & PROCESS_FLAG_USER_EXEC) {
 			init_task_mm_section(mm, i);
-		else
+		} else if (task->flag & PROCESS_FLAG_KERN_EXEC) {
+			init_task_mm_section(mm, i);
+			alloc_user_stack(mm);
+		} else {
 			copy_mm_section_info(mm, mmp, i);
+		}
 	}
 
 	if (init_task_page_table(&mm->page_table, mm->mm_section))
@@ -138,15 +202,15 @@ static int map_new_task_page(struct mm_struct *mm, struct page *page,
 {
 	struct task_mm_section *section = &mm->mm_section[section_index];
 	
-	//add_page_to_list_tail(page, &section->alloc_mem);
+	add_page_to_list_tail(page, &section->alloc_mem);
 
-	//if (map_task_address(&mm->page_table,
-	//	page_to_va(page), map_address, section_index))
+	if (map_task_address(&mm->page_table,
+		page_to_va(page), map_address, section_index))
 		return -ENOMEM;
 
 	section->mapped_size += PAGE_SIZE;
 	section->alloc_pages++;
-	//page->user_page_attr.map_address = attr->map_address;
+	page->user_page_attr.map_address = user_addr;
 
 	return 0;
 }
@@ -160,7 +224,7 @@ int copy_process_memory(struct task_struct *new, struct task_struct *parent)
 	struct page *page;
 	struct page *new_page;
 	struct mm_section *nsection;
-	//struct user_page_attr *attr;
+	struct user_page_attr *attr;
 	int i;
 	
 	/* 
@@ -177,17 +241,24 @@ int copy_process_memory(struct task_struct *new, struct task_struct *parent)
 		/* list for all allocated memory of this section */
 		list_for_each(p, list) {
 			page = list_entry(list, struct page, plist);
-	//		attr = page->user_page_attr;
+			attr = &page->user_page_attr;
 
 			new_page = request_pages(1, GFP_USER);
 			if (!new_page)
 				goto err;
 
 			/* map user address to task memory space */
-			if (map_new_task_page(nmm, page, 0, i)) //0 to attr->map_address
+			if (map_new_task_page(nmm, page,
+					attr->map_address, i))
 				goto err;
 
-			memcpy(page_to_va(new_page), page_to_va(page), PAGE_SIZE);
+			/*
+			 * if copy user page we can directory use father's
+			 * user address to incase the memory of system is
+			 * so large
+			 */
+			memcpy((void *)page_to_va(new_page),
+					(void *)attr->map_address, PAGE_SIZE);
 		}
 	}
 
@@ -208,7 +279,7 @@ static int mm_copy_argv_envp(unsigned long *base,
 	int i, length, argv_sum = 1, env_sum = 0;
 	unsigned long load_base;
 	unsigned long *table_base;
-	int stack_type =  0; //arch_stack_type();
+	int stack_type =  0;
 	int aligin = sizeof(unsigned long);
 
 	for (i = 0; ; i++) {

@@ -562,28 +562,8 @@ int load_elf_section(struct elf_section *section,
 	return 0;
 }
 
-int load_elf_image(struct task_struct *task,
-		   struct file *file,
-		   struct elf_file *elf)
+int load_elf_image(struct task_struct *task)
 {
-#if 0
-	struct mm_struct *mm;
-	struct elf_section *section;
-	int ret = 0;
-
-	if (!task || !file || !elf)
-		return -ENOENT;
-
-	/* clear elf size to zero */
-	mm->elf_size = 0;
-
-	/* load each section to memory */
-	for ( ; section != NULL; section) {
-		ret = load_elf_section(section, file, mm);
-		if (ret)
-			return ret;
-	}
-#endif
 	return 0;
 }
 
@@ -687,11 +667,13 @@ int do_exec(char __user *name,
 			debug("can not fork new process when exec\n");
 			return -ENOMEM;
 		}
+		new->flag |= TASK_FLAG_KERNEL_EXEC;
 	} 
 	else {
 		/* need reinit the mm_struct */
 		new = current;
 		strncpy(new->name, name, PROCESS_NAME_SIZE);
+		init_mm_struct(new);
 	}
 
 	/* 
@@ -706,7 +688,7 @@ int do_exec(char __user *name,
 	 * will be coverd by new process. so if process load
 	 * failed, the process will be core dumped.
 	 */
-	err = load_elf_image(new, file, elf);
+	err = load_elf_image(new);
 	if (err) {
 		kernel_error("Failed to load elf file to memory\n");
 		goto release_elf_file;
@@ -752,7 +734,7 @@ int kernel_exec(char *filename)
 }
 
 
-int build_idle_task(void)
+int __init_text build_idle_task(void)
 {
 	idle = allocate_task("idle");
 	if (!idle)

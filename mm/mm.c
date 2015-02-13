@@ -531,9 +531,7 @@ static int update_boot_section_info(struct mm_section *section,
 		page->phy_address = tmp - pv_offset;
 		init_list(&page->plist);
 		page->free_size = 0;
-		page->free_base = 0;
 		page->count = 1;
-		page->usage = 1;
 		page->flag = __GFP_KERNEL;
 
 		tmp += PAGE_SIZE;
@@ -735,7 +733,6 @@ static void init_pages(struct mm_section *section,
 
 	for (i = index; i < index + count; i++) {
 		pg->phy_address = va - pv_offset;
-		pg->usage = 0;
 		init_list(&pg->plist);
 
 		if (i == index) {
@@ -751,9 +748,7 @@ static void init_pages(struct mm_section *section,
 		 * initilize its free_base scope.
 		 */
 		pg->free_size = PAGE_SIZE;
-		pg->free_base = va;
 		pg->flag = flag;
-		pg->usage = 0;
 		va += PAGE_SIZE;
 	}
 }
@@ -789,6 +784,7 @@ static unsigned long get_free_pages_from_section(struct mm_section *section,
 	 * need check whether the memory is areadly maped
 	 * or not [TBD]
 	 */
+	/* if (flag & __GFP_USER) */
 
 	/*
 	 * set the releated bit in bitmap

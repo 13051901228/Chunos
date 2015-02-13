@@ -7,6 +7,13 @@
 #include <os/printk.h>
 #include <os/file.h>
 
+int load_elf_data(struct elf_file *efile,
+		unsigned long tar,
+		size_t size, offset_t off)
+{
+
+}
+
 struct elf_file *dup_elf_info(struct elf_file *src)
 {
 	struct elf_file *elf_file;
@@ -19,17 +26,7 @@ struct elf_file *dup_elf_info(struct elf_file *src)
 	if (!elf_file)
 		return NULL;
 
-	section_size = sizeof(struct elf_section) * src->section_nr;
-	elf_file->sections = kmalloc(section_size, GFP_KERNEL);
-	if (!elf_file->sections) {
-		kfree(elf_file);
-		return NULL;
-	}
-
-	elf_file->section_nr = src->section_nr;
-	elf_file->entry_point_address = src->entry_point_address;
-	memcpy(src->sections, elf_file->sections, section_size);
-
+	memcpy((void *)elf_file, (void *)src, sizeof(struct elf_file));
 	return elf_file;
 }
 
@@ -37,77 +34,55 @@ static struct elf_file *parse_elf_info(elf_section_header *header,
 				int section_num, char *str)
 {
 	elf_section_header *tmp = header;
-	int i, nr, max_id = 0;
+	int i;
 	char *name;
+	size_t size = 0;
 	struct elf_file *elf_file =NULL;
-	struct elf_section *section;
-	struct elf_section buf;
+	struct elf_section *section_roda;
+	struct elf_section *section_bss;
 
 	elf_file = (struct elf_file *)
 		kzalloc(sizeof(struct elf_file), GFP_KERNEL);
 	if (elf_file == NULL)
 		return NULL;
 
-	/* calculate how many section need to allocate memory */
-	for (i = 0; i < section_num; i++) {
-		if (tmp[i].sh_flags & SHF_ALLOC)
-			nr++;
-	}
-
-	/* alloc memory for the all sections which need memory */
-	elf_file->sections =
-		kzalloc(sizeof(struct elf_section) * nr, GFP_KERNEL);
-	if (elf_file->sections) {
-		kfree(elf_file);
-		return NULL;
-	}
+	section_roda = &elf_file->sections[SECTION_TEXT_DATA];
+	section_bss = &elf_file->section[SECTION_BSS];
 
 	for (i = 0; i < section_num; i++) {
 		/* whether this section needed allocate mem. */
 		if (tmp->sh_flags & SHF_ALLOC) {
 			name = &str[tmp->sh_name];
-			section = &elf_file->sections[elf_file->section_nr];
+			if (strncmp(name, "bss", 3)) {
+				/* can be optimized TBD */
+				if (!section_roda->offset)
+					section->offset = header->sh_offset;
+				if (!section_roda->load_addr)
+					section->load_addr = header->sh_addr;
+				section->size += header->sh_size;
+			} else {
+				section_bss->offset = header->sh_offset;
+				section_bss->load_addr = header->sh_addr;
+				section->size = header->sh_size;
+			}
 
-			section->offset = header->sh_offset;
-			section->size = header->sh_size;
-			section->load_addr = header->sh_addr;
-			strcpy(section->name, name);
-
-			if (section->size > elf_file->sections[max_id].size)
-				max_id = elf_file->section_nr;
-
-			elf_file->section_nr++;
+			size += header->sh_size;
 		}
 
 		tmp++;
 	}
 
-	/* put the max_size section to the last */
-	if (max_id != (elf_file->section_nr - 1)) {
-		memcpy(&buf, &elf_file->sections[max_id],
-				sizeof(struct elf_section));
-
-		memcpy(&elf_file->sections[max_id],
-				&elf_file->sections[elf_file->section_nr - 1],
-				sizeof(struct elf_section));
-
-		memcpy(&elf_file->sections[elf_file->section_nr - 1], &buf,
-				sizeof(struct elf_section));
-	}
-
-	for (i = 0; i < elf_file->section_nr; i ++)
-		elf_file->elf_size += elf_file->sections[i].size;
+	elf_file->elf_size = size;
 
 	return elf_file;
 }
 
-void release_elf_file(struct elf_file *file)
+void inline release_elf_file(struct elf_file *file)
 {
-	kfree(file->sections);
 	kfree(file);
 }
 
-size_t elf_memory_size(struct elf_file *efile)
+size_t inline elf_memory_size(struct elf_file *efile)
 {
 	return efile->elf_size;
 }
