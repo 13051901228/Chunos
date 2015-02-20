@@ -115,6 +115,7 @@ static inline int slab_pool_id(int size)
 static int alloc_new_slab_cache(size_t size)
 {
 	int nr = page_nr(size);
+	struct page *page;
 
 	/*
 	 * when system booting up, allocate one big cache for
@@ -123,14 +124,15 @@ static int alloc_new_slab_cache(size_t size)
 	 * PAGE_SIZE
 	 */
 	mutex_lock(&pslab->slab_mutex);
-	pslab->slab_free = (unsigned long)get_free_pages(nr, GFP_SLAB);
+	page = request_pages(nr, GFP_SLAB);
 	if (!pslab->slab_free)
 		return -ENOMEM;
 
-	add_page_to_list_tail(va_to_page(pslab->slab_free), &pslab->plist);
+	add_page_to_list_tail(page, &pslab->plist);
 	pslab->free_size = nr << PAGE_SHIFT;
 	pslab->alloc_size += nr << PAGE_SHIFT;
 	pslab->alloc_pages += nr;
+	pslab->slab_free = page_to_va(page);
 	mutex_unlock(&pslab->slab_mutex);
 
 	return 0;

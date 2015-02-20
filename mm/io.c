@@ -6,5 +6,5 @@
 
 void *request_io_mem(unsigned long addr)
 {
-	return (void *)pa_to_va(addr);
+	return 0;
 }

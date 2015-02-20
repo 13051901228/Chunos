@@ -2,6 +2,7 @@
 #define _ELF_H
 
 #include <os/types.h>
+#include <os/file.h>
 
 struct file;
 
@@ -144,6 +145,7 @@ struct elf_section {
  * 2: bss
  */
 struct elf_file {
+	struct file *file;
 	size_t elf_size;
 	unsigned long entry_point_address;
 	struct elf_section sections[SECTION_MAX];

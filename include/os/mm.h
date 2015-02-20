@@ -34,7 +34,6 @@
 #define __GFP_MASK		(__GFP_PGT | __GFP_USER | __GFP_SLAB)
 
 struct user_page_attr {
-	unsigned long map_address;
 };
 
 struct slab_page_attr {
@@ -54,7 +53,7 @@ struct mmap_page_attr {
  */
 struct page {
 	unsigned long phy_address;
-	unsigned long vir_address;
+	unsigned long map_address;
 	unsigned long flag;
 	struct list_head plist;
 	u32 count : 16;

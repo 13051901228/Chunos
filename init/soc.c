@@ -1,3 +1,9 @@
+/*
+ * init/soc.c
+ *
+ * Created by Le Min(lemin9538@163.com)
+ */
+
 #include <os/types.h>
 #include <os/init.h>
 #include <os/mm.h>
@@ -19,8 +25,8 @@ extern int os_tick_handler(void *arg);
 static int __init_text find_system_soc(struct soc *soc)
 {
 	int nr, i;
-	int ret = 0;
 	unsigned long start;
+	int ret;
 	extern unsigned long soc_platform_start, soc_platform_end;
 	extern unsigned long soc_board_start, soc_board_end;
 	struct soc_platform *platform_tmp;

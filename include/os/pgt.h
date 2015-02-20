@@ -12,6 +12,7 @@
 #include <os/kernel.h>
 #include <os/mmu.h>
 #include <os/task_mm.h>
+#include <os/spin_lock.h>
 
 /*
  * lvl1_pgt_base: the level 1 pgt base address
@@ -30,8 +31,8 @@ struct task_page_table {
 	struct list_head *pte_current_page;
 	unsigned long pte_free_base;
 
-	unsigned long elf_buffer_base;
-	spin_lock_t elf_buffer_lock;
+	unsigned long temp_buffer_base;
+	int temp_buffer_nr;
 };
 
 int map_task_address(struct task_page_table *table,

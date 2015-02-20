@@ -29,15 +29,15 @@ DEFINE_SYSCALL(execve, __NR_execve, (void *)sys_execve);
 
 pid_t sys_fork(void)
 {
-	u32 flag = 0;
+	unsigned long flag = 0;
 	pt_regs *regs = get_pt_regs();
 
 	/* indicate fork will sucessed to generate
 	 * child process */
 	regs->r0 = 0;
-	flag |= PROCESS_TYPE_USER | PROCESS_FLAG_FORK;
+	flag |= (PROCESS_TYPE_USER | PROCESS_FLAG_FORK);
 
-	return do_fork(current->name, regs, regs->sp, flag);
+	return do_fork(current->name, regs, flag);
 }
 DEFINE_SYSCALL(fork, __NR_fork, (void *)sys_fork);
 

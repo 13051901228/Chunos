@@ -70,7 +70,7 @@ int mmu_create_pde_entry(unsigned long pde_entry_addr,
 }
 
 int mmu_create_pte_entry(unsigned long pte_entry_addr,
-		unsigned long va, unsigned long user_addr)
+		unsigned long pa, unsigned long user_addr)
 {
 	return 0;
 }

@@ -1,3 +1,8 @@
+/*
+ * arch/arm/kernel/entry.S
+ *
+ * Created by Le Min(lemin9538@163.com)
+ */
 	.text
 #include "include/kconfig.h"
 #include <config/config.h>

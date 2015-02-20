@@ -12,6 +12,8 @@
 #include <os/pgt.h>
 #include <os/list.h>
 #include <os/spin_lock.h>
+#include <os/memory_map.h>
+#include <os/sched.h>
 
 #define PGT_ALLOC_BUFFER_MIN		(64)
 
@@ -171,8 +173,8 @@ static int pgt_map_new_pde_entry(struct task_page_table *table,
 	return pte_free_base;
 }
 
-int map_task_address(struct task_page_table *table,
-		unsigned long va, unsigned long user_addr)
+int pgt_map_task_page(struct task_page_table *table,
+		unsigned long pa, unsigned long user_addr)
 {
 	unsigned long pde_addr = 0;
 	unsigned long pte_addr = 0;
@@ -190,15 +192,91 @@ int map_task_address(struct task_page_table *table,
 			return -ENOMEM;
 	}
 
-	return mmu_create_pte_entry(pte_addr, va, user_addr);
+	return mmu_create_pte_entry(pte_addr, pa, user_addr);
 }
 
-int init_task_page_table(struct task_page_table *table,
-		struct task_mm_section *section)
+struct list_head *pgt_map_temp_memory(struct list_head *head,
+		int *count, int *nr, int type)
+{
+	int max, i;
+	struct page *page;
+	unsigned long base = KERNEL_TEMP_BUFFER_BASE;
+	struct task_page_table *table =
+		&current->mm_struct.page_table;
+	unsigned long pte_base = table->temp_buffer_base;
+	struct list_head *list = head;
+
+	if (count == NULL)
+		max = 1;
+	else
+		max = *count;
+
+	max = MIN(max, table->temp_buffer_nr);
+
+	if (!type) {
+		base = base - (max << PAGE_SHIFT);
+		pte_base += (max * sizeof(unsigned long));
+	}
+	
+	if (type) {
+		for (i = 0; i < max; i++) {
+			page = list_to_page(list);
+			mmu_create_pte_entry(pte_base, 
+					page_to_pa(page), base);
+			base += PAGE_SIZE;
+			pte_base += sizeof(unsigned long);
+			list = list_next(list);
+		}
+	} else {
+		for (i = 0; i < max; i++) {
+			page = list_to_page(list);
+			mmu_create_pte_entry(pte_base, 
+					page_to_pa(page), base);
+			base -= PAGE_SIZE;
+			pte_base -= sizeof(unsigned long);
+			list = list_next(list);
+		}
+	}
+
+	if (*nr)
+		*nr = max;
+
+	return list;
+}
+
+int pgt_map_task_memory(struct task_page_table *table,
+		struct list_head *mem_list,
+		unsigned long map_base, int type)
+{
+	struct list_head *list;
+	struct page *page;
+	unsigned long base = map_base;
+
+	if (!map_base)
+		return -EINVAL;
+
+	if (type) {
+		list_for_each(mem_list, list) {
+			page = list_to_page(list);
+			pgt_map_task_page(table, page_to_pa(page), base);
+			base += PAGE_SIZE;
+		}
+	} else {
+		list_for_each(mem_list, list) {
+			page = list_to_page(list);
+			pgt_map_task_page(table, page_to_pa(page), base);
+			base -= PAGE_SIZE;
+		}
+	}
+
+	return 0;
+}
+
+int init_task_page_table(struct task_page_table *table)
 {
 	unsigned long base = 0;
 
-	if (!table || !section)
+	if (!table)
 		return -EINVAL;
 
 	/*
@@ -206,7 +284,7 @@ int init_task_page_table(struct task_page_table *table,
 	 * we reinit the pde and pte page table
 	 */
 	if (!table->pte_alloc_size) {
-		memset((void *)table, 0, sizeof(struct task_page_table));
+		memset((char *)table, 0, sizeof(struct task_page_table));
 		base = alloc_new_pde();
 		if (!base) {
 			kernel_error("no memory for task pde\n");
@@ -214,6 +292,13 @@ int init_task_page_table(struct task_page_table *table,
 		}
 
 		table->pde_base = base;
+		table->temp_buffer_base = get_free_page(GFP_PGT);
+		if (!table->temp_buffer_base) {
+			release_pde(base);
+			return -ENOMEM;
+		}
+
+		table->temp_buffer_nr = (PAGE_SIZE / sizeof(unsigned long));
 	}
 
 	/* 

@@ -1,3 +1,8 @@
+/*
+ * arch/arm/kernel/boot.S
+ *
+ * Created by Le Min(lemin9538@163.com)
+ */
 	.text
 #include "include/kconfig.h"
 #include "include/arm.h"

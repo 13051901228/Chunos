@@ -13,12 +13,13 @@
 #include <os/task_mm.h>
 #include <os/pgt.h>
 #include <os/file.h>
+#include <os/memory_map.h>
 
 static size_t init_max_alloc_size[TASK_MM_SECTION_MAX] = {
 	SIZE_1M, SIZE_NK(16), 0
 };
 
-static void free_task_section_memory(struct task_mm_section *section)
+static void free_sections_memory(struct task_mm_section *section)
 {
 	int i;
 	
@@ -31,28 +32,28 @@ static void free_task_section_memory(struct task_mm_section *section)
 static void release_task_memory(struct mm_struct *mm)
 {
 	free_task_page_table(&mm->page_table);
-	free_task_section_memory(mm->mm_section);
+	free_sections_memory(mm->mm_section);
 }
 
 static void init_task_mm_section(struct mm_struct *mm, int i)
 {
 	struct task_mm_section *section;
-	
+
 	section = &mm->mm_section[i];
+	section->flag = i;
+
 	switch (i) {
 	case TASK_MM_SECTION_RO:
-		section->section_size = elf_memory_size(mm->elf_file);
-		section->flag = 0;
+		section->section_size =
+			elf_memory_size(mm->elf_file);
 		break;
 
 	case TASK_MM_SECTION_STACK:
 		section->section_size = SIZE_NM(1);
-		section->flag = 0;
 		break;
 
 	case TASK_MM_SECTION_MMAP:
 		section->section_size = SIZE_NM(512);
-		section->flag = 1;
 		break;
 
 	default:
@@ -66,6 +67,7 @@ static void init_task_mm_section(struct mm_struct *mm, int i)
 	 * alloc_mem
 	 */
 	section->mapped_size = 0;
+	section->flag |= i;
 }
 
 static void copy_mm_section_info(struct mm_struct *c,
@@ -90,6 +92,38 @@ static int alloc_user_stack(struct mm_struct *mm)
 	return 0;
 }
 
+static int section_get_memory(int count,
+		struct task_mm_section *section)
+{
+	struct page *page;
+	int i;
+	int flag;
+
+	if (count <= 0)
+		return -EINVAL;
+
+#define GFP_MMAP	0
+	if (section->flag & TASK_MM_SECTION_MMAP)
+		flag = GFP_MMAP;
+	else
+		flag = GFP_USER;
+
+	for (i = 0; i < count; i++) {
+		page = request_pages(1, flag);
+		if (!page)
+			return -ENOMEM;
+
+		add_page_to_list_tail(page, &section->alloc_mem);
+		section->alloc_pages++;
+		section->mapped_size += PAGE_SIZE;
+	}
+
+	return 0;
+}
+
+#define MEM_TYPE_GROW_UP	1
+#define MEM_TYPE_GROW_DOWN	0
+
 int load_elf_image(struct task_struct *task)
 {
 	struct page *page;
@@ -97,9 +131,7 @@ int load_elf_image(struct task_struct *task)
 	struct task_mm_section *section =
 		&mm->mm_section[TASK_MM_SECTION_RO];
 	size_t load_size;
-	int page_nr, i;
-	struct pgt_map_info map_info;
-	unsigned long offset = 0;
+	int page_nr, ret, i;
 
 	/* 
 	 * here we load the all size, later will consider
@@ -111,121 +143,170 @@ int load_elf_image(struct task_struct *task)
 
 	/*
 	 * if the section already has memory use it then
-	 * alloc left memory for task
+	 * alloc left memory for text and data of the task
 	 */
-	for (i = 0; i < page_nr; i++) {
-		page = request_pages(1, GFP_USER);
-		if (!page)
-			goto out;
-
-		add_page_to_list_tail(page, &section->alloc_mem);
-	}
-
-	list = list_next(&section->alloc_mem);
-
-	while (load_size > 0) {
-		list = pgt_map_elf_buffer(mm, &map_info, list);
-		if (!map_info.size && load_size)
-			goto out;
-
-		load_elf_data(mm->elf_file, map_info->vir_base,
-				map_info->size, offset);
-
-		load_size -= map_info->size;
-		offset += map_info->size;
-	}
-
-	return 0;
-
-out:
-	return -ENOMEM;
-}
-
-int init_mm_struct(struct task_struct *task)
-{
-	struct mm_struct *mm = &task->mm_struct;
-	struct mm_struct *mmp = &task->parent->mm_struct;
-	int i;
-
-	if (task_is_kernel(task))
-		return 0;
-
-	/*
-	 * if parent is user space we can dup the fd TBD
-	 */
-	mm->file = kernel_open(task->name, O_RDONLY);
-	if (!mm->file)
-		return -ENOENT;
-
-	/*
-	 * get the elf file's informaiton
-	 */
-	mm->elf_file = dup_elf_info(mmp->elf_file);
-	if (!mm->elf_file) {
-		mm->elf_file = get_elf_info(mm->file);
-		if (!mm->elf_file)
-			goto err_elf_file;
-	}
-
-	/* 
-	 * if new task's parent is started by exec  we need get
-	 * the information from the elf file, else copy
-	 * the information from the parent process.
-	 */
-	for (i = 0; i < TASK_MM_SECTION_MAX; i++) {
-		if (task->flag & PROCESS_FLAG_USER_EXEC) {
-			init_task_mm_section(mm, i);
-		} else if (task->flag & PROCESS_FLAG_KERN_EXEC) {
-			init_task_mm_section(mm, i);
-			alloc_user_stack(mm);
-		} else {
-			copy_mm_section_info(mm, mmp, i);
-		}
-	}
-
-	if (init_task_page_table(&mm->page_table, mm->mm_section))
-		goto err;
-
-	return 0;
-
-err:
-	release_elf_file(mm->elf_file);
-
-err_elf_file:
-	kernel_close(mm->file);
-
-	return -ENOMEM;
-}
-
-static int map_new_task_page(struct mm_struct *mm, struct page *page,
-		unsigned user_addr, int section_index)
-{
-	struct task_mm_section *section = &mm->mm_section[section_index];
-	
-	add_page_to_list_tail(page, &section->alloc_mem);
-
-	if (map_task_address(&mm->page_table,
-		page_to_va(page), map_address, section_index))
+	ret = section_get_memory(page_nr, section);
+	if (ret == -ENOMEM)
 		return -ENOMEM;
+	
+	ret = pgt_map_task_memory(mm->page_table,
+			&section->alloc_mem,
+			section->base_addr, MEM_TYPE_GROW_UP);
+	if (ret)
+		return ret;
 
-	section->mapped_size += PAGE_SIZE;
-	section->alloc_pages++;
-	page->user_page_attr.map_address = user_addr;
+	ret = load_elf_data(mm->elf_file,
+			section->base_addr, load_size);
+	if (ret)
+		return ret;
 
 	return 0;
 }
 
-int copy_process_memory(struct task_struct *new, struct task_struct *parent)
+static int copy_section_memory(struct task_mm_section *new,
+		struct task_mm_section *parent, int type)
+{
+	int nr = 0;
+	int count = new->alloc_pages;
+	unsigned long pbase = parent->base_addr;
+	unsigned long nbase = KERNEL_TEMP_BUFFER_BASE;
+	struct list_head *list = list_next(&new->alloc_mem);
+
+	if (new->alloc_pages != parent->alloc_pages)
+		return -EINVAL;
+
+	while (count) {
+		list = pgt_map_temp_memory(list,
+				&count, &nr, type);
+		if (!list)
+			return -EFAULT;
+
+		memcpy((char *)nbase, (char *)pbase,
+				nr << PAGE_SHIFT);
+		if (type)
+			pbase += (nr << PAGE_SHIFT);
+		else
+			pbase -= (nr >> PAGE_SHIFT);
+		count -= nr;
+	}
+
+	return 0;
+}
+
+static int copy_task_elf(struct mm_struct *new,
+		struct mm_struct *p)
+{
+	struct task_mm_section *nsection =
+		&new->mm_section[TASK_MM_SECTION_RO];
+	struct task_mm_section *psection =
+		&p->mm_section[TASK_MM_SECTION_RO];
+	int ret;
+
+	/*
+	 * map memory to new task's space
+	 */
+	ret = pgt_map_task_memory(&new->page_table,
+			&nsection->alloc_mem,
+			&nsection->base_addr,
+			MEM_TYPE_GROW_UP);
+	if (ret)
+		return ret;
+
+	/*
+	 * copy memory form parent's section
+	 */
+	ret = copy_section_memory(nsection,
+			psection, MEM_TYPE_GROW_UP);
+	if (ret) {
+		kernel_error("Memory is not correct \
+				for section\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int copy_task_stack(struct mm_struct *new,
+		struct mm_struct *p)
+{
+	struct task_mm_section *nsection =
+		&new->mm_section[TASK_MM_SECTION_STACK];
+	struct task_mm_section *psection =
+		&p->mm_section[TASK_MM_SECTION_STACK];
+	int ret;
+
+	/*
+	 * map memory to new task's space
+	 */
+	ret = pgt_map_task_memory(&new->page_table,
+			&nsection->alloc_mem,
+			&nsection->base_addr,
+			MEM_TYPE_GROW_DOWN);
+	if (ret)
+		return ret;
+
+	/*
+	 * copy memory form parent's section
+	 */
+	ret = copy_section_memory(nsection,
+			psection, MEM_TYPE_GROW_DOWN);
+	if (ret) {
+		kernel_error("Memory is not correct \
+				for section\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int copy_task_mmap(struct mm_struct *new,
+		struct mm_struct *parent)
+{
+	struct task_mm_section *n =
+		&new->mm_section[TASK_MM_SECTION_MMAP];
+	struct task_mm_section *p =
+		&parent->mm_section[TASK_MM_SECTION_MMAP];
+	struct list_head *nl, *list, *pl, *temp;
+	struct page *np, *pp;
+	int ret;
+
+	if (n->alloc_pages != p->alloc_pages)
+		return -EINVAL;
+
+	nl = &n->alloc_mem;
+	pl = &p->alloc_mem;
+
+	list_for_each(pl, list) {
+		nl = list_next(nl);
+		np = list_to_page(nl);
+		pp = list_to_page(pl);
+		
+		ret = pgt_map_task_page(&new->page_table,
+				page_to_pa(np), page_to_va(pp));
+		if (ret)
+			return ret;
+
+		temp = pgt_map_temp_memory(list, NULL,
+				NULL, MEM_TYPE_GROW_UP);
+		if (!temp)
+			return -EFAULT;
+
+		memcpy((char *)KERNEL_TEMP_BUFFER_BASE,
+			(char *)page_to_va(pp), PAGE_SIZE);
+	}
+
+	return 0;
+}
+
+int copy_task_memory(struct task_struct *new,
+		struct task_struct *parent)
 {
 	struct mm_struct *pmm = &parent->mm_struct;
 	struct mm_struct *nmm = &new->mm_struct;
-	struct list_head *p;
-	struct list_head *list;
-	struct page *page;
-	struct page *new_page;
-	struct mm_section *nsection;
-	struct user_page_attr *attr;
-	int i;
+	struct task_mm_section *nsection;
+	struct task_mm_section *psection;
+	int i, ret = 0;
+	int nr_page;
 	
 	/* 
 	 * as the pdir is created can copy the memory
@@ -234,38 +315,35 @@ int copy_process_memory(struct task_struct *new, struct task_struct *parent)
 	if (!new || !parent)
 		return -EINVAL;
 
+	/*
+	 * first alloc memory for each section
+	 */
 	for (i = 0; i < TASK_MM_SECTION_MAX; i++) {
 		nsection = &nmm->mm_section[i];
-		p = &pmm->mm_section[i].alloc_mem;
+		psection = &pmm->mm_section[i];
 
-		/* list for all allocated memory of this section */
-		list_for_each(p, list) {
-			page = list_entry(list, struct page, plist);
-			attr = &page->user_page_attr;
+		/* how many pages is needed */
+		nr_page = psection->alloc_pages -
+			nsection->alloc_pages;
 
-			new_page = request_pages(1, GFP_USER);
-			if (!new_page)
-				goto err;
-
-			/* map user address to task memory space */
-			if (map_new_task_page(nmm, page,
-					attr->map_address, i))
-				goto err;
-
-			/*
-			 * if copy user page we can directory use father's
-			 * user address to incase the memory of system is
-			 * so large
-			 */
-			memcpy((void *)page_to_va(new_page),
-					(void *)attr->map_address, PAGE_SIZE);
-		}
+		ret = section_get_memory(nr_page, nsection);
+		if (ret == -ENOMEM)
+			goto err;
 	}
+
+	if (copy_task_elf(nmm, pmm))
+		goto err;
+
+	if (copy_task_stack(nmm, pmm))
+		goto err;
+
+	if (copy_task_mmap(nmm, pmm))
+		goto err;
 
 	return 0;
 
 err:
-	free_task_section_memory(nmm);
+	free_sections_memory(nmm);
 	return -ENOMEM;
 }
 
@@ -366,9 +444,63 @@ int task_mm_setup_argv_envp(struct mm_struct *mm,
 	ret = mm_copy_argv_envp(page_to_va(page), 
 			stack_base, name, argv, envp);
 
-	if (map_new_task_page(mm, page, 
-		PROCESS_META_DATA_BASE, TASK_MM_SECTION_RO))
-		return -ENOMEM;
+	//if (map_new_task_page(mm, page, 
+	//	PROCESS_META_DATA_BASE, TASK_MM_SECTION_RO))
+	//	return -ENOMEM;
 
 	return ret;
 }
+
+int init_mm_struct(struct task_struct *task)
+{
+	struct mm_struct *mm = &task->mm_struct;
+	struct mm_struct *mmp = &task->parent->mm_struct;
+	int i;
+
+	if (task_is_kernel(task))
+		return 0;
+
+	/*
+	 * get the elf file's informaiton
+	 */
+	mm->elf_file = dup_elf_info(mmp->elf_file);
+	if (!mm->elf_file) {
+		struct file *file;
+
+		file = kernel_open(task->name, O_RDONLY);
+		if (!file)
+			return -ENOENT;
+
+		mm->elf_file = get_elf_info(file);
+		if (!mm->elf_file)
+			return -ENOMEM;
+
+		mm->elf_file->file = file;
+	}
+
+	/* 
+	 * if new task's parent is started by exec  we need get
+	 * the information from the elf file, else copy
+	 * the information from the parent task.
+	 */
+	for (i = 0; i < TASK_MM_SECTION_MAX; i++) {
+		if (task->flag & PROCESS_FLAG_USER_EXEC) {
+			init_task_mm_section(mm, i);
+		} else if (task->flag & PROCESS_FLAG_KERN_EXEC) {
+			init_task_mm_section(mm, i);
+			alloc_user_stack(mm);
+		} else {
+			copy_mm_section_info(mm, mmp, i);
+		}
+	}
+
+	if (init_task_page_table(&mm->page_table))
+		goto err;
+
+	return 0;
+
+err:
+	release_elf_file(mm->elf_file);
+	return -ENOMEM;
+}
+

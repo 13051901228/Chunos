@@ -1,3 +1,9 @@
+/*
+ * init/main.c
+ *
+ * Created by Le Min(lemin9538@163.com)
+ */
+
 #include <os/types.h>
 #include <os/mm.h>
 #include <os/init.h>

@@ -146,35 +146,24 @@ typedef enum _state_change_t {
 	STATE_NONE_TO_NONE,
 } state_change_t;
 
-/* old, new, value */
-#define CHANGE_TABLE_SIZE	(14 * 3)
-static char change_table[CHANGE_TABLE_SIZE] = {
-	PROCESS_STATE_UNKNOWN, PROCESS_STATE_PREPARE, STATE_NONE_TO_PREPARE,
-	PROCESS_STATE_UNKNOWN, PROCESS_STATE_SLEEP, STATE_NONE_TO_SLEEP,
-	PROCESS_STATE_PREPARE, PROCESS_STATE_RUNNING, STATE_PREPARE_TO_RUNNING,
-	PROCESS_STATE_PREPARE, PROCESS_STATE_SLEEP, STATE_PREPARE_TO_SLEEP,
-	PROCESS_STATE_PREPARE, PROCESS_STATE_IDLE, STATE_PREPARE_TO_IDLE,
-	PROCESS_STATE_RUNNING, PROCESS_STATE_SLEEP, STATE_RUNNING_TO_SLEEP,
-	PROCESS_STATE_RUNNING, PROCESS_STATE_PREPARE, STATE_RUNNING_TO_PREPARE,
-	PROCESS_STATE_RUNNING, PROCESS_STATE_IDLE, STATE_RUNNING_TO_IDLE,
-	PROCESS_STATE_SLEEP, PROCESS_STATE_PREPARE, STATE_SLEEP_TO_PREPARE,
-	PROCESS_STATE_SLEEP, PROCESS_STATE_IDLE, STATE_SLEEP_TO_IDLE,
-	PROCESS_STATE_SLEEP, PROCESS_STATE_RUNNING, STATE_SLEEP_TO_RUNNING,
-	PROCESS_STATE_PREPARE, PROCESS_STATE_UNKNOWN, STATE_PREPARE_TO_UNKNOWN
+static char change_table[PROCESS_STATE_UNKNOWN][PROCESS_STATE_UNKNOWN] = {
+	STATE_NONE_TO_NONE
 };
 
-static state_change_t get_state_change(state_t old, state_t new)
+static void init_state_change_table(void)
 {
-	int i = 0;
-
-	for (i = 0; i < CHANGE_TABLE_SIZE ; i += 3) {
-		if ((old == change_table[i]) && 
-		    (new == change_table[i + 1])) {
-			return change_table[i + 2];
-		}
-	}
-
-	return STATE_NONE_TO_NONE;
+	change_table[PROCESS_STATE_UNKNOWN][PROCESS_STATE_PREPARE] = STATE_NONE_TO_PREPARE; 
+	change_table[PROCESS_STATE_UNKNOWN][PROCESS_STATE_SLEEP] = STATE_NONE_TO_SLEEP;
+	change_table[PROCESS_STATE_PREPARE][PROCESS_STATE_RUNNING] = STATE_PREPARE_TO_RUNNING;
+	change_table[PROCESS_STATE_PREPARE][PROCESS_STATE_SLEEP] = STATE_PREPARE_TO_SLEEP;
+	change_table[PROCESS_STATE_PREPARE][PROCESS_STATE_IDLE] = STATE_PREPARE_TO_IDLE;
+	change_table[PROCESS_STATE_RUNNING][PROCESS_STATE_SLEEP] = STATE_RUNNING_TO_SLEEP;
+	change_table[PROCESS_STATE_RUNNING][PROCESS_STATE_PREPARE] = STATE_RUNNING_TO_PREPARE;
+	change_table[PROCESS_STATE_RUNNING][PROCESS_STATE_IDLE] = STATE_RUNNING_TO_IDLE;
+	change_table[PROCESS_STATE_SLEEP][PROCESS_STATE_PREPARE] = STATE_SLEEP_TO_PREPARE;
+	change_table[PROCESS_STATE_SLEEP][PROCESS_STATE_IDLE] = STATE_SLEEP_TO_IDLE;
+	change_table[PROCESS_STATE_SLEEP][PROCESS_STATE_RUNNING] = STATE_SLEEP_TO_RUNNING;
+	change_table[PROCESS_STATE_PREPARE][PROCESS_STATE_UNKNOWN] = STATE_PREPARE_TO_UNKNOWN;
 }
 
 void set_task_state(struct task_struct *task, state_t state)
@@ -185,7 +174,7 @@ void set_task_state(struct task_struct *task, state_t state)
 	state_change_t change = STATE_NONE_TO_NONE;
 
 	debug("task %s state old %d new %d\n", task->name, old, new);
-	change = get_state_change(old, new);
+	change = change_table[old][new];
 	if (change == STATE_NONE_TO_NONE) {
 		return;
 	}
@@ -617,6 +606,8 @@ int sched_init(void)
 		init_list(&os_sched_table[i].list);
 		os_sched_table[i].count = 0;
 	}
+
+	init_state_change_table();
 
 	init_sched_list(sleep);
 	init_sched_list(idle);

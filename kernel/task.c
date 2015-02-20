@@ -32,7 +32,7 @@ static char *init_envp[MAX_ENVP + 1] = {NULL};
 extern int init_signal_struct(struct task_struct *task);
 extern void copy_sigreturn_code(struct task_struct *task);
 
-static int init_task_struct(struct task_struct *task, u32 flag)
+static int init_task_struct(struct task_struct *task, unsigned long flag)
 {
 	struct task_struct *parent;
 	unsigned long flags;
@@ -277,7 +277,7 @@ static int copy_process(struct task_struct *new)
 	struct task_struct *old = new->parent;
 
 	if (old) {
-		copy_process_memory(old, new);
+		copy_task_memory(old, new);
 	}
 
 	return 0;
@@ -314,64 +314,6 @@ static int set_up_task_stack(struct task_struct *task, pt_regs *regs)
 int switch_task(struct task_struct *cur,
 		struct task_struct *next)
 {
-#if 0
-	struct list_head *list;
-	struct list_head *head;
-	unsigned long stack_base = PROCESS_USER_STACK_BASE;
-	unsigned long task_base = PROCESS_USER_BASE;
-	unsigned long mmap_base = PROCESS_USER_MMAP_BASE;
-	unsigned long pa;
-	struct page *page;
-
-	if (!cur || !next)
-		return -EINVAL;
-
-	/*
-	 * frist we need flush all cache for the current
-	 * process, this cacue the two bugs which spend
-	 * me two weeks to debug.
-	 */
-	flush_cache();
-
-	/*
-	 * if the task is a kernel task, we do not
-	 * need to load his page table. else if next
-	 * run is a userspace task, we load his page
-	 * table.
-	 */
-	if (next->flag & PROCESS_TYPE_KERNEL)
-		return 0;
-
-	/*
-	 * load the page table for stack, because stack
-	 * is grow downward, sub 4m for one page.
-	 */
-	head = &next->mm_struct.stack_list;
-	list_for_each (head, list) {
-		page = list_entry(list, struct page, pgt_list);
-		pa = page_to_pa(page);
-		build_tlb_table_entry(stack_base - SIZE_NM(4), pa,
-				      SIZE_NM(4), TLB_ATTR_USER_MEMORY);
-		stack_base -= SIZE_NM(4);
-	}
-
-	/* load elf image memory page table */
-	head = &next->mm_struct.elf_list;
-	list_for_each (head, list) {
-		page = list_entry(list, struct page, pgt_list);
-		pa = page_to_pa(page);
-		build_tlb_table_entry(task_base, pa, SIZE_NM(4), TLB_ATTR_USER_MEMORY);
-		task_base += SIZE_NM(4);
-	}
-
-	head = &next->mm_struct.mmap_page_list;
-	list_for_each (head, list) {
-		page = list_entry(list, struct page, pgt_list);
-		pa = page_to_pa(page);
-		build_tlb_table_entry(mmap_base, pa, SIZE_NM(4), TLB_ATTR_USER_MEMORY);
-		task_base += SIZE_NM(4);
-	}
-#endif
 	return 0;
 }
 
@@ -417,7 +359,7 @@ static inline void free_task(struct task_struct *task)
 		free_pages((void *)task);
 }
 
-struct task_struct *alloc_and_init_task(char *name, int flag)
+struct task_struct *alloc_and_init_task(char *name, unsigned long flag)
 {
 	struct task_struct *new;
 	int ret = 0;
@@ -450,7 +392,7 @@ exit:
 	return NULL;
 }
 
-int do_fork(char *name, pt_regs *regs, int flag)
+int do_fork(char *name, pt_regs *regs, unsigned long flag)
 {
 	struct task_struct *new;
 
@@ -496,75 +438,6 @@ void release_task(struct task_struct *task)
 		release_task_memory(task);
 		kfree(task);
 	}
-}
-
-int load_elf_section(struct elf_section *section,
-		     struct file *file,
-		     struct mm_struct *mm)
-{
-#if 0
-	struct list_head *list = &mm->elf_image_list;
-	struct page *page = NULL;
-	int i, j, k;
-	char *base_addr;
-	unsigned long base;
-
-	/*
-	 * the first 4k memory for task is 0x00001000
-	 * so we can calculate the location of the section
-	 * in the memeory
-	 */
-	if ((section->load_addr < PROCESS_USER_EXEC_BASE) ||
-	    (section->size == 0))
-		return -EINVAL;
-
-	/* find the memeory location in the list */
-	base = section->load_addr - PROCESS_USER_BASE;
-	i = base >> PAGE_SHIFT;
-	j = base % PAGE_SIZE;
-	debug("load elf image page %d offset %d\n", i, j);
-	for (k = 0; k <= i; k++) {
-		list = list_next(list);
-		if (list == NULL)
-			return -ENOMEM;
-	}
-
-	/*
-	 * if the section is bss, we clear the all memory
-	 * to 0, else we load the data to the image.
-	 */
-	k = section->size;
-	mm->elf_size += k;
-	kernel_seek(file, section->offset, SEEK_SET);
-	do {
-		page = list_entry(list, struct page, plist);
-		base_addr = (char *)page->free_base;
-		base_addr = base_addr + j;
-		i = PAGE_SIZE -j;
-		j = k >= i ? PAGE_SIZE -j : k;
-		if (strncmp(section->name, ".bss", 4)) {
-			debug("Load Section:[%s] address:[0x%x] size[0x%x]\n",
-				     section->name, base_addr, j);
-			i = kernel_read(file, base_addr, j);
-			if (i < 0)
-				return -EIO;
-		} else {
-			debug("Clear BSS section to Zero: base:[0x%x] size:[0x%x]\n",
-				      base_addr, j);
-			memset(base_addr, 0, j);
-		}
-
-		k = k - j;
-		j = 0;
-		list = list_next(list);
-	} while (k > 0);
-#endif	
-	return 0;
-}
-
-int load_elf_image(struct task_struct *task)
-{
-	return 0;
 }
 
 int task_kill_self(struct task_struct *task)
@@ -667,7 +540,7 @@ int do_exec(char __user *name,
 			debug("can not fork new process when exec\n");
 			return -ENOMEM;
 		}
-		new->flag |= TASK_FLAG_KERNEL_EXEC;
+		//new->flag |= TASK_FLAG_KERNEL_EXEC;
 	} 
 	else {
 		/* need reinit the mm_struct */

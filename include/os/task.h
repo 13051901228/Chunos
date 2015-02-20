@@ -60,7 +60,7 @@ struct task_struct {
 	unsigned long stack_origin;
 
 	char name[PROCESS_NAME_SIZE + 1];
-	u32 flag;
+	unsigned long flag;
 
 	pid_t pid;
 	u32 uid;

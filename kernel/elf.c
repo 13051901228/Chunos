@@ -8,25 +8,70 @@
 #include <os/file.h>
 
 int load_elf_data(struct elf_file *efile,
-		unsigned long tar,
-		size_t size, offset_t off)
+		unsigned long tar, size_t size)
 {
+	struct elf_section *section;
+	offset_t offset = 0;
+	size_t load_size;
+	size_t ret;
+	int i;
 
+	/* 
+	 * size an tar must be page align
+	 */
+	if (!is_align(tar, PAGE_SIZE) || !efile->file)
+		return -EINVAL;
+
+	/*
+	 * now only support ro data bss
+	 */
+	for (i = 0; i < SECTION_MAX - 1; i++) {
+		section = &efile->sections[i];
+		if ((tar >= section->load_addr) &&
+		    (tar < section->load_addr + section->size))
+			break;
+	}
+
+	if (i == SECTION_MAX -1 )
+		return -EFAULT;
+
+	if ((tar + size) > (section->load_addr + section->size))
+		size = section->size;
+
+	offset = tar - section->load_addr;
+	ret = kernel_seek(efile->file, offset, SEEK_SET);
+	if (ret)
+		return -ENOENT;
+
+	if (i == SECTION_TEXT_DATA) {
+		while (size) {
+			load_size = MIN(size, PAGE_SIZE);
+			ret = kernel_read(efile->file,
+					(char *)tar, load_size);
+			if (ret != load_size)
+				return -EIO;
+			size -= load_size;
+		}
+	} else {
+		memset((char *)tar, 0, size);
+	}
+
+	return 0;
 }
 
 struct elf_file *dup_elf_info(struct elf_file *src)
 {
 	struct elf_file *elf_file;
-	int section_size;
 
 	if (!src)
 		return NULL;
 
-	elf_file = kmalloc(sizeof(struct elf_file), GFP_KERNEL);
+	elf_file = kzalloc(sizeof(struct elf_file), GFP_KERNEL);
 	if (!elf_file)
 		return NULL;
 
-	memcpy((void *)elf_file, (void *)src, sizeof(struct elf_file));
+	memcpy((void *)elf_file, (void *)src,
+			sizeof(struct elf_file));
 	return elf_file;
 }
 
@@ -47,7 +92,7 @@ static struct elf_file *parse_elf_info(elf_section_header *header,
 		return NULL;
 
 	section_roda = &elf_file->sections[SECTION_TEXT_DATA];
-	section_bss = &elf_file->section[SECTION_BSS];
+	section_bss = &elf_file->sections[SECTION_BSS];
 
 	for (i = 0; i < section_num; i++) {
 		/* whether this section needed allocate mem. */
@@ -55,15 +100,19 @@ static struct elf_file *parse_elf_info(elf_section_header *header,
 			name = &str[tmp->sh_name];
 			if (strncmp(name, "bss", 3)) {
 				/* can be optimized TBD */
-				if (!section_roda->offset)
-					section->offset = header->sh_offset;
-				if (!section_roda->load_addr)
-					section->load_addr = header->sh_addr;
-				section->size += header->sh_size;
+				if (!section_roda->offset) {
+					section_roda->offset = header->sh_offset;
+				}
+
+				if (!section_roda->load_addr) {
+					section_roda->load_addr = header->sh_addr;
+				}
+
+				section_roda->size += header->sh_size;
 			} else {
 				section_bss->offset = header->sh_offset;
 				section_bss->load_addr = header->sh_addr;
-				section->size = header->sh_size;
+				section_bss->size = header->sh_size;
 			}
 
 			size += header->sh_size;
@@ -77,9 +126,12 @@ static struct elf_file *parse_elf_info(elf_section_header *header,
 	return elf_file;
 }
 
-void inline release_elf_file(struct elf_file *file)
+void inline release_elf_file(struct elf_file *efile)
 {
-	kfree(file);
+	if (efile) {
+		kernel_close(efile->file);
+		kfree(efile);
+	}
 }
 
 size_t inline elf_memory_size(struct elf_file *efile)

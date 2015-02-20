@@ -16,7 +16,7 @@ typedef enum _task_mm_section_t {
 	TASK_MM_SECTION_STACK,
 	TASK_MM_SECTION_MMAP,
 	TASK_MM_SECTION_MAX,
-} task_mm_section;
+} task_mm_section_t;
 
 /*
  * user_base_addr: base address of this section in user space
@@ -32,6 +32,7 @@ typedef enum _task_mm_section_t {
 struct task_mm_section {
 	size_t section_size;
 	size_t mapped_size;
+	unsigned long base_addr;
 	int alloc_pages;
 	struct list_head alloc_mem;
 	int flag;

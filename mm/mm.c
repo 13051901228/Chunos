@@ -13,7 +13,7 @@
 #include <os/kernel.h>
 #include <os/panic.h>
 #include <os/soc.h>
-#include "memory_map.h"
+#include <os/memory_map.h>
 
 #define ZONE_MAX_SECTION	4
 
@@ -530,7 +530,6 @@ static int update_boot_section_info(struct mm_section *section,
 		/* init page struct */
 		page->phy_address = tmp - pv_offset;
 		init_list(&page->plist);
-		page->free_size = 0;
 		page->count = 1;
 		page->flag = __GFP_KERNEL;
 
@@ -692,9 +691,7 @@ struct page *va_to_page(unsigned long va)
 
 unsigned long page_to_va(struct page *page)
 {
-	struct mm_section *section = page_get_section(page);
-
-	return section ? section_page_to_va(section, page) : 0;
+	return (page->map_address);
 }
 
 unsigned long page_to_pa(struct page *page)
@@ -702,23 +699,11 @@ unsigned long page_to_pa(struct page *page)
 	return (page->phy_address);
 }
 
-unsigned long pa_to_va(unsigned long pa)
-{
-	struct mm_section *section = pa_get_section(pa);
-
-	return section ? (pa + section->pv_offset) : 0;
-}
-
 struct page *pa_to_page(unsigned long pa)
 {
 	struct mm_section *section = pa_get_section(pa);
 
 	return section ? section_pa_to_page(section, pa) : 0;
-}
-
-unsigned long va_to_pa(unsigned long va)
-{
-	return page_to_pa(va_to_page(va));
 }
 
 static void init_pages(struct mm_section *section,
@@ -747,7 +732,6 @@ static void init_pages(struct mm_section *section,
 		 * is used as a page table for process, we need
 		 * initilize its free_base scope.
 		 */
-		pg->free_size = PAGE_SIZE;
 		pg->flag = flag;
 		va += PAGE_SIZE;
 	}
@@ -1096,14 +1080,4 @@ void free_pages_on_list(struct list_head *head)
 inline struct page *list_to_page(struct list_head *list)
 {
 	return list_entry(list, struct page, plist);
-}
-
-void copy_page_va(unsigned long target, unsigned long source)
-{
-	memcpy((char *)target, (char *)source, PAGE_SIZE);
-}
-
-void copy_page_pa(unsigned long target, unsigned long source)
-{
-	copy_page_va(pa_to_va(target), pa_to_va(source));
 }

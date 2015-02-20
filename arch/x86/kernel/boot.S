@@ -1,3 +1,8 @@
+/*
+ * arch/x86/kernel/boot.S
+ *
+ * Created by Le Min (lemin9538@163.com)
+ */
 	.text
 
 #include "include/x86_config.h"
