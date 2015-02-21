@@ -7,14 +7,16 @@
 #include <os/printk.h>
 #include <os/file.h>
 
-int load_elf_data(struct elf_file *efile,
+int elf_load_elf_image(struct elf_file *efile,
 		unsigned long tar, size_t size)
 {
 	struct elf_section *section;
 	offset_t offset = 0;
 	size_t load_size;
 	size_t ret;
-	int i;
+	unsigned long rodata_base = 0;
+	unsigned long bss_base = 0;
+	size_t rodata_size = 0, bss_size = 0;
 
 	/* 
 	 * size an tar must be page align
@@ -22,39 +24,54 @@ int load_elf_data(struct elf_file *efile,
 	if (!is_align(tar, PAGE_SIZE) || !efile->file)
 		return -EINVAL;
 
-	/*
-	 * now only support ro data bss
-	 */
-	for (i = 0; i < SECTION_MAX - 1; i++) {
-		section = &efile->sections[i];
-		if ((tar >= section->load_addr) &&
-		    (tar < section->load_addr + section->size))
-			break;
+	if ((tar <= efile->elf_base))
+		return -EINVAL;
+
+	section = &efile->sections[SECTION_TEXT_DATA];
+	if ((tar >= section->load_addr) &&
+	     (tar < section->load_addr + section->size)) {
+		rodata_base = tar;
+		load_size = section->load_addr +
+			    section->size - tar;
+		rodata_size = MIN(load_size, size);
+		tar += rodata_size;
+		size -= rodata_size;
 	}
 
-	if (i == SECTION_MAX -1 )
-		return -EFAULT;
+	section = &efile->sections[SECTION_BSS];
+	if ((tar >= section->load_addr) &&
+	     (tar < section->load_addr + section->size)) {
+		bss_base = tar;
+		load_size = section->load_addr +
+			    section->size - tar;
+		bss_size = MIN(load_size, size);
+		tar += rodata_size;
+		size -= rodata_size;
+	}
 
-	if ((tar + size) > (section->load_addr + section->size))
-		size = section->size;
+	if (size != 0)
+		kernel_warning("elf size may not correct\n");
 
-	offset = tar - section->load_addr;
-	ret = kernel_seek(efile->file, offset, SEEK_SET);
-	if (ret)
-		return -ENOENT;
+	if (rodata_size) {
+		offset = rodata_base - efile->elf_base;
+		ret = kernel_seek(efile->file, offset, SEEK_SET);
+		if (ret)
+			return -ENOENT;
 
-	if (i == SECTION_TEXT_DATA) {
-		while (size) {
-			load_size = MIN(size, PAGE_SIZE);
+		while (rodata_size) {
+			load_size = MIN(rodata_size, PAGE_SIZE);
 			ret = kernel_read(efile->file,
-					(char *)tar, load_size);
+					(char *)rodata_base, load_size);
 			if (ret != load_size)
 				return -EIO;
-			size -= load_size;
+
+			rodata_base += load_size;
+			rodata_size -= load_size;
 		}
-	} else {
-		memset((char *)tar, 0, size);
 	}
+
+	if (bss_size)
+		memset((char *)bss_base, 0, bss_size);
 
 	return 0;
 }
@@ -122,6 +139,7 @@ static struct elf_file *parse_elf_info(elf_section_header *header,
 	}
 
 	elf_file->elf_size = size;
+	elf_file->elf_base = section_roda->load_addr;
 
 	return elf_file;
 }
@@ -137,6 +155,11 @@ void inline release_elf_file(struct elf_file *efile)
 size_t inline elf_memory_size(struct elf_file *efile)
 {
 	return efile->elf_size;
+}
+
+unsigned long inline elf_get_base_addr(struct elf_file *efile)
+{
+	return 0;
 }
 
 struct elf_file *get_elf_info(struct file *file)

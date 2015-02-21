@@ -36,6 +36,8 @@
 #define PROCESS_USER_MMAP_MAX_SIZE	0x10000000
 #define PROCESS_USER_MMAP_BASE		(0x40000000)
 
+#define PROCESS_USER_META_BASE		(0x0)
+
 /* resever 96 byte to store sigreturn code for user process */
 #define PROCESS_SIGRETURN_OFFSET	(4000)
 

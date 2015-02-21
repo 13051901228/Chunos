@@ -11,11 +11,18 @@
 #include <os/elf.h>
 #include <os/pgt.h>
 
+/*
+ * SECTION_RO : text data and bss of the elf file
+ * SECTION_STACK : stack section
+ * SECTION_MMAP : mmap section
+ * SECTION_META : used to store the argv and envp and other
+ */
 typedef enum _task_mm_section_t {
 	TASK_MM_SECTION_RO,
 	TASK_MM_SECTION_STACK,
 	TASK_MM_SECTION_MMAP,
-	TASK_MM_SECTION_MAX,
+	TASK_MM_SECTION_META,
+	TASK_MM_SECTION_MAX
 } task_mm_section_t;
 
 /*

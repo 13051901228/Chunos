@@ -147,6 +147,7 @@ struct elf_section {
 struct elf_file {
 	struct file *file;
 	size_t elf_size;
+	unsigned long elf_base;
 	unsigned long entry_point_address;
 	struct elf_section sections[SECTION_MAX];
 };

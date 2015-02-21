@@ -14,6 +14,10 @@
 #include <os/pgt.h>
 #include <os/file.h>
 #include <os/memory_map.h>
+#include <os/mirros.h>
+
+#define MEM_TYPE_GROW_UP	1
+#define MEM_TYPE_GROW_DOWN	0
 
 static size_t init_max_alloc_size[TASK_MM_SECTION_MAX] = {
 	SIZE_1M, SIZE_NK(16), 0
@@ -46,14 +50,22 @@ static void init_task_mm_section(struct mm_struct *mm, int i)
 	case TASK_MM_SECTION_RO:
 		section->section_size =
 			elf_memory_size(mm->elf_file);
+		section->base_addr = elf_get_base_addr(mm->elf_file);
 		break;
 
 	case TASK_MM_SECTION_STACK:
 		section->section_size = SIZE_NM(1);
+		section->base_addr = PROCESS_USER_STACK_BASE;
 		break;
 
 	case TASK_MM_SECTION_MMAP:
 		section->section_size = SIZE_NM(512);
+		section->base_addr = PROCESS_USER_MMAP_BASE;
+		break;
+
+	case TASK_MM_SECTION_META:
+		section->section_size = SIZE_NK(16);
+		section->base_addr = PROCESS_USER_META_BASE;
 		break;
 
 	default:
@@ -87,11 +99,6 @@ static void copy_mm_section_info(struct mm_struct *c,
 	init_list(&csection->alloc_mem);
 }
 
-static int alloc_user_stack(struct mm_struct *mm)
-{
-	return 0;
-}
-
 static int section_get_memory(int count,
 		struct task_mm_section *section)
 {
@@ -121,17 +128,35 @@ static int section_get_memory(int count,
 	return 0;
 }
 
-#define MEM_TYPE_GROW_UP	1
-#define MEM_TYPE_GROW_DOWN	0
-
-int load_elf_image(struct task_struct *task)
+static int alloc_task_user_stack(struct mm_struct *mm)
 {
-	struct page *page;
-	struct mm_struct *mm = &task->mm_struct;
+	int nr_page;
+	int ret = 0;
+
+	struct task_mm_section *section =
+		&mm->mm_section[TASK_MM_SECTION_STACK];
+
+	nr_page = 4 - section->alloc_pages;
+
+	if (nr_page > 0)
+		ret = section_get_memory(nr_page, section);
+
+	if (ret)
+		return ret;
+
+	return pgt_map_task_memory(&mm->page_table,
+			&section->alloc_mem,
+			section->base_addr,
+			MEM_TYPE_GROW_DOWN);
+}
+
+
+int task_mm_load_elf_image(struct mm_struct *mm)
+{
 	struct task_mm_section *section =
 		&mm->mm_section[TASK_MM_SECTION_RO];
 	size_t load_size;
-	int page_nr, ret, i;
+	int page_nr, ret;
 
 	/* 
 	 * here we load the all size, later will consider
@@ -155,7 +180,7 @@ int load_elf_image(struct task_struct *task)
 	if (ret)
 		return ret;
 
-	ret = load_elf_data(mm->elf_file,
+	ret = elf_load_elf_image(mm->elf_file,
 			section->base_addr, load_size);
 	if (ret)
 		return ret;
@@ -193,30 +218,26 @@ static int copy_section_memory(struct task_mm_section *new,
 	return 0;
 }
 
-static int copy_task_elf(struct mm_struct *new,
-		struct mm_struct *p)
+static int copy_task_mm_section(struct mm_struct *nmm,
+		struct mm_struct *pmm, int i, int type)
 {
-	struct task_mm_section *nsection =
-		&new->mm_section[TASK_MM_SECTION_RO];
-	struct task_mm_section *psection =
-		&p->mm_section[TASK_MM_SECTION_RO];
 	int ret;
+	struct task_mm_section *n = &nmm->mm_section[i];
+	struct task_mm_section *p = &pmm->mm_section[i];
 
 	/*
 	 * map memory to new task's space
 	 */
-	ret = pgt_map_task_memory(&new->page_table,
-			&nsection->alloc_mem,
-			&nsection->base_addr,
-			MEM_TYPE_GROW_UP);
+	ret = pgt_map_task_memory(&nmm->page_table,
+			&n->alloc_mem,
+			&n->base_addr, type);
 	if (ret)
 		return ret;
 
 	/*
 	 * copy memory form parent's section
 	 */
-	ret = copy_section_memory(nsection,
-			psection, MEM_TYPE_GROW_UP);
+	ret = copy_section_memory(n, p, type);
 	if (ret) {
 		kernel_error("Memory is not correct \
 				for section\n");
@@ -226,37 +247,28 @@ static int copy_task_elf(struct mm_struct *new,
 	return 0;
 }
 
-static int copy_task_stack(struct mm_struct *new,
+static inline int copy_task_elf(struct mm_struct *new,
 		struct mm_struct *p)
 {
-	struct task_mm_section *nsection =
-		&new->mm_section[TASK_MM_SECTION_STACK];
-	struct task_mm_section *psection =
-		&p->mm_section[TASK_MM_SECTION_STACK];
-	int ret;
+	return copy_task_mm_section(new, p,
+			TASK_MM_SECTION_RO,
+			MEM_TYPE_GROW_UP);
+}
 
-	/*
-	 * map memory to new task's space
-	 */
-	ret = pgt_map_task_memory(&new->page_table,
-			&nsection->alloc_mem,
-			&nsection->base_addr,
-			MEM_TYPE_GROW_DOWN);
-	if (ret)
-		return ret;
+static inline int copy_task_stack(struct mm_struct *new,
+		struct mm_struct *p)
+{
+	return copy_task_mm_section(new, p,
+			TASK_MM_SECTION_STACK,
+			MEM_TYPE_GROW_UP);
+}
 
-	/*
-	 * copy memory form parent's section
-	 */
-	ret = copy_section_memory(nsection,
-			psection, MEM_TYPE_GROW_DOWN);
-	if (ret) {
-		kernel_error("Memory is not correct \
-				for section\n");
-		return ret;
-	}
-
-	return 0;
+static inline int copy_task_meta(struct mm_struct *new,
+		struct mm_struct *p)
+{
+	return copy_task_mm_section(new, p,
+			TASK_MM_SECTION_META,
+			MEM_TYPE_GROW_UP);
 }
 
 static int copy_task_mmap(struct mm_struct *new,
@@ -331,7 +343,7 @@ int copy_task_memory(struct task_struct *new,
 			goto err;
 	}
 
-	if (copy_task_elf(nmm, pmm))
+	if (copy_task_meta(nmm, pmm))
 		goto err;
 
 	if (copy_task_stack(nmm, pmm))
@@ -340,122 +352,131 @@ int copy_task_memory(struct task_struct *new,
 	if (copy_task_mmap(nmm, pmm))
 		goto err;
 
+	if (copy_task_elf(nmm, pmm))
+		goto err;
+
 	return 0;
 
 err:
-	free_sections_memory(nmm);
+	free_sections_memory(nmm->mm_section);
 	return -ENOMEM;
 }
 
-#define PROCESS_META_DATA_BASE	0
+/*
+ * below marco define the meta data struct
+ * now the max length of meta area is 4k
+ * should be increase later
+ */
+#define SIGNAL_META_OFFSET	(0)
+#define SIGNAL_META_SIZE	(256)
 
-static int mm_copy_argv_envp(unsigned long *base,
-		unsigned long *stack_base,
+#define ARGV_META_TABLE_OFFSET	\
+	(SIGNAL_META_OFFSET + SIGNAL_META_SIZE)
+#define ARGV_MAX_NR		(32)
+#define ARGV_META_TABLE_SIZE	(ARGV_MAX_NR * sizeof(unsigned long))
+
+#define ENV_META_TABLE_OFFSET	\
+	(ARGV_META_TABLE_OFFSET + ARGV_META_TABLE_SIZE)
+#define ENV_MAX_NR		(32)
+#define ENV_META_TABLE_SIZE	(ENV_MAX_NR * sizeof(unsigned long))
+
+#define ARGENV_META_OFFSET	\
+	(ENV_META_TABLE_OFFSET + ENV_META_TABLE_SIZE)
+
+int task_mm_setup_argenv(struct mm_struct *mm,
 		char *name, char **argv, char **envp)
 {
-	char *argv_base = (char *)(PROCESS_META_DATA_BASE);
-	int i, length, argv_sum = 1, env_sum = 0;
-	unsigned long load_base;
+	struct task_mm_section *section =
+		&mm->mm_section[TASK_MM_SECTION_META];
+	unsigned long str_base;
 	unsigned long *table_base;
-	int stack_type =  0;
-	int aligin = sizeof(unsigned long);
+	int i = 0, length;
+	unsigned long limit =
+		section->base_addr + section->mapped_size;
 
-	for (i = 0; ; i++) {
-		if (argv[i])
-			argv_sum++;
-		else
-			break;
-	}
+	/* assume all size will < 1 page */
 
-	for (i = 0; ; i++) {
-		if (envp[i])
-			env_sum++;
-		else
-			break;
-	}
+	str_base = section->base_addr + ARGENV_META_OFFSET;
 	
-	load_base = base;
-#define STACK_TYPE_UP_TO_DOWN		1
-	if (stack_type = STACK_TYPE_UP_TO_DOWN) {
-		table_base = (unsigned long *)(stack_base + PAGE_SIZE);
-		//table_base = table_base - (argv + env_sum + 1);
-	} else {
-		/* TBD */
-		table_base += (argv_sum + env_sum + 1);
-	}
+	/* Copy argv */
+	table_base = (unsigned long *)
+		section->base_addr + ARGV_META_TABLE_OFFSET;
 
-	/* copy name */
 	length = strlen(name);
-	strcpy((char *)load_base, name);
-	*table_base = (unsigned long)argv_base;
-	argv_base += length;
-	load_base += length;
-	if (stack_base == STACK_TYPE_UP_TO_DOWN)
-		table_base++;
-	else
-		table_base--;
-	argv_base = (char *)baligin((unsigned long)argv_base, aligin);
-
-	/* copy argv */
-	for (i = 0; i < argv_sum; i++) {
+	memcpy((char *)str_base, name, length);
+	*table_base = str_base;
+	table_base++;
+	str_base += length;
+	str_base = align(str_base, sizeof(unsigned long));
+	while (argv[i] && (i < ARGV_MAX_NR - 1)) {
 		length = strlen(argv[i]);
-		strcpy((char *)load_base, argv[i]);
-		*table_base = (unsigned long)argv_base;
-		argv_base += length;				/* argv[i] address in userspace */
-		load_base += length;
-		if (stack_base == STACK_TYPE_UP_TO_DOWN)
-			table_base++;
-		else
-			table_base--;
-		argv_base = (char *)baligin((u32)argv_base, aligin);
-		load_base = baligin(load_base, aligin);
+		memcpy((char *)str_base, argv[i], length);
+		if ((str_base + length) >= limit)
+			goto out;
+		*table_base = str_base;
+		table_base++;
+		str_base += length;
+		str_base = align(str_base, sizeof(unsigned long));
+		i++;
 	}
 
-	/* copy envp */
-	for (i = 0; i < env_sum; i++) {
+	i = 0;
+	table_base = (unsigned long *)
+		section->base_addr + ENV_META_TABLE_OFFSET;
+	while (envp[i] && (i < ENV_MAX_NR)) {
 		length = strlen(envp[i]);
-		strcpy((char *)load_base, argv[i]);
-		*table_base = (unsigned long)argv_base;
-		argv_base += length;	/* argv[i] address in userspace */
-		load_base += length;
-		if (stack_base == STACK_TYPE_UP_TO_DOWN)
-			table_base++;
-		else
-			table_base--;
-		argv_base = (char *)baligin((u32)argv_base, aligin);
-		load_base = baligin(load_base, aligin);
+		memcpy((char *)str_base, envp[i], length);
+		if ((str_base + length) >= limit)
+			goto out;
+		*table_base = str_base;
+		table_base++;
+		str_base += length;
+		str_base = align(str_base, sizeof(unsigned long));
+		i++;
 	}
 
-	return (argv_sum + env_sum + 1) * sizeof(unsigned long);
+out:
+	return 0;
 }
 
-int task_mm_setup_argv_envp(struct mm_struct *mm,
-		char *name, char **argv, char **envp)
+int task_mm_copy_sigreturn(struct mm_struct *mm,
+		char *start, int size)
 {
-	struct page *page;
-	unsigned long stack_base;
-	int ret;
+	struct task_mm_section *section =
+		&mm->mm_section[TASK_MM_SECTION_META];
+	unsigned long load_base =
+		section->base_addr + SIGNAL_META_OFFSET;
 
-	page = request_pages(1, GFP_KERNEL);
-	if (!page)
-		return -ENOMEM;
-#define PROCESS_STACK_BASE		0
-	//stack_base = (unsigned long)task_ua_to_va(PROCESS_STACK_BASE);
-	ret = mm_copy_argv_envp(page_to_va(page), 
-			stack_base, name, argv, envp);
+	if (!start || !size)
+		return -EINVAL;
 
-	//if (map_new_task_page(mm, page, 
-	//	PROCESS_META_DATA_BASE, TASK_MM_SECTION_RO))
-	//	return -ENOMEM;
+	memcpy((char *)load_base, start, size);
+}
 
-	return ret;
+static int init_task_meta_section(struct mm_struct *mm)
+{
+	struct task_mm_section *section =
+		&mm->mm_section[TASK_MM_SECTION_META];
+
+	if (!section->alloc_pages) {
+		if (section_get_memory(1, section))
+			return -ENOMEM;
+	}
+
+	if (pgt_map_task_memory(&mm->page_table,
+				&section->alloc_mem,
+				section->base_addr,
+				MEM_TYPE_GROW_UP))
+		return -EFAULT;
+
+	return 0;
 }
 
 int init_mm_struct(struct task_struct *task)
 {
+	int i, ret;
 	struct mm_struct *mm = &task->mm_struct;
 	struct mm_struct *mmp = &task->parent->mm_struct;
-	int i;
 
 	if (task_is_kernel(task))
 		return 0;
@@ -488,19 +509,29 @@ int init_mm_struct(struct task_struct *task)
 			init_task_mm_section(mm, i);
 		} else if (task->flag & PROCESS_FLAG_KERN_EXEC) {
 			init_task_mm_section(mm, i);
-			alloc_user_stack(mm);
 		} else {
 			copy_mm_section_info(mm, mmp, i);
 		}
 	}
 
-	if (init_task_page_table(&mm->page_table))
-		goto err;
+	/*
+	 * if task is a user task, need to allocate
+	 * user stack for it.
+	 */
+	if (task_is_user(task)) {
+		ret = alloc_task_user_stack(mm);
+		if (ret)
+			return ret;
+
+		ret = init_task_meta_section(mm);
+		if (ret)
+			return ret;
+	}
+
+	ret = init_task_page_table(&mm->page_table);
+	if (ret)
+		return ret;
 
 	return 0;
-
-err:
-	release_elf_file(mm->elf_file);
-	return -ENOMEM;
 }
 

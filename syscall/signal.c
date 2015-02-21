@@ -61,18 +61,11 @@ int signal_handler(pt_regs *regs, unsigned long user_sp)
 
 void copy_sigreturn_code(struct task_struct *task)
 {
-#if 0
-	struct list_head *list = &task->mm_struct.elf_image_list;
 	char sigreturn_start[16];
 	char sigreturn_end[16];
-	unsigned long load_base;
 
-	list = list_next(list);
-	load_base = page_to_va(list_entry(list, struct page, plist));
-	load_base += PROCESS_SIGRETURN_OFFSET;
-
-	memcpy(load_base, sigreturn_start, sigreturn_end - sigreturn_start);
-#endif
+	task_mm_copy_sigreturn(&task->mm_struct, sigreturn_start,
+			sigreturn_end - sigreturn_start);
 }
 
 static sighandler_t sys_signal(int signum, sighandler_t handler)

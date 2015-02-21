@@ -291,7 +291,7 @@ static int set_up_task_stack(struct task_struct *task, pt_regs *regs)
 	 * in arm, stack is grow from up to down,so we 
 	 * adjust it;
 	 */
-	if (task->stack_base == NULL) {
+	if (task->stack_origin == NULL) {
 		kernel_error("task kernel stack invailed\n");
 		return -EFAULT;
 	}
@@ -317,13 +317,14 @@ int switch_task(struct task_struct *cur,
 	return 0;
 }
 
-static int task_setup_argv_envp(struct task_struct *task,
+static int task_setup_argenv(struct task_struct *task,
 		char *name, char **argv, char **envp)
 {
 	if (task_is_kernel(task))
 		return -EINVAL;
 
-	return task_mm_setup_argv_envp(&task->mm_struct, name, argv, envp);
+	return task_mm_setup_argenv(&task->mm_struct,
+			name, argv, envp);
 }
 
 static struct task_struct *allocate_task(char *name)
@@ -359,7 +360,22 @@ static inline void free_task(struct task_struct *task)
 		free_pages((void *)task);
 }
 
-struct task_struct *alloc_and_init_task(char *name, unsigned long flag)
+static int reinit_task(struct task_struct *task, char *name)
+{
+	int ret;
+
+	if (name)
+		strncpy(task->name, name, PROCESS_NAME_SIZE);
+
+	ret = init_mm_struct(task);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static struct task_struct *
+alloc_and_init_task(char *name, unsigned long flag)
 {
 	struct task_struct *new;
 	int ret = 0;
@@ -523,37 +539,37 @@ int do_exec(char __user *name,
 	    pt_regs *regs)
 {
 	struct task_struct *new;
-	struct file *file;
 	int err = 0;
-	struct elf_file *elf = NULL;
-	int ae_size = 0;
+	unsigned long flag = current->flag;
 
 	if (current->flag & PROCESS_TYPE_KERNEL) {
 		/*
 		 * need to fork a new task, before exec
 		 * but no call sys_fork to fork a new task
-		 * becase kernel process has not allocat page
+		 * becase kernel process has not allocate page
 		 * table and mm_struct.
 		 */
-		new = alloc_and_init_task(name, PROCESS_TYPE_USER);
+		new = alloc_and_init_task(name,
+				PROCESS_FLAG_KERN_EXEC);
 		if (!new) {
-			debug("can not fork new process when exec\n");
+			debug("Can not Create new process when exec\n");
 			return -ENOMEM;
 		}
-		//new->flag |= TASK_FLAG_KERNEL_EXEC;
-	} 
-	else {
+	} else {
 		/* need reinit the mm_struct */
 		new = current;
-		strncpy(new->name, name, PROCESS_NAME_SIZE);
-		init_mm_struct(new);
+		if (reinit_task(new, name))
+			goto out_err;
+
+		new->flag |= PROCESS_FLAG_USER_EXEC;
 	}
 
 	/* 
-	 * must befor load_elf_image, since the memory
+	 * must before load_elf_image, since the memory
 	 * will be overwrited by it
 	 */
-	ae_size = task_setup_argv_envp(new, name, argv, envp);
+	task_setup_argenv(new, name, argv, envp);
+
 	copy_sigreturn_code(new);
 
 	/*
@@ -561,34 +577,28 @@ int do_exec(char __user *name,
 	 * will be coverd by new process. so if process load
 	 * failed, the process will be core dumped.
 	 */
-	err = load_elf_image(new);
+	err = task_mm_load_elf_image(&new->mm_struct);
 	if (err) {
 		kernel_error("Failed to load elf file to memory\n");
-		goto release_elf_file;
+		goto out_err;
 	}
 
 	/* flush cache and write buffer to memory */
 	flush_cache();
 
 	/* modify the regs for new process. */
-	init_pt_regs(regs, NULL, (void *)ae_size);
+	init_pt_regs(regs, NULL, NULL);
 
 	/*
 	 * fix me - whether need to do this if exec
 	 * was called by user space process?
 	 */
-	if (current->flag & PROCESS_TYPE_KERNEL) {
-		set_up_task_stack(new, regs);
-		set_task_state(new, PROCESS_STATE_PREPARE);
-	}
+	set_up_task_stack(new, regs);
+	set_task_state(new, PROCESS_STATE_PREPARE);
 
-release_elf_file:
-	release_elf_file(elf);
-	kernel_close(file);
-
-	if(err && (current->flag & PROCESS_TYPE_KERNEL)) {
+out_err:
+	if(err && (flag & PROCESS_TYPE_KERNEL))
 		release_task(new);
-	}
 
 	return err;
 }
