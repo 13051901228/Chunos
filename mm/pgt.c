@@ -15,7 +15,7 @@
 #include <os/memory_map.h>
 #include <os/sched.h>
 
-#define PGT_ALLOC_BUFFER_MIN		(64)
+#define CONFIG_PGT_PDE_BUFFER_MIN		(64)
 
 /* 
  * this buffer used to allocated memory for page
@@ -63,10 +63,7 @@ static unsigned long alloc_new_pde(void)
 
 		pgt_buffer.alloc_nr++;
 	} else {
-#if 0
 		page = list_to_page(list_next(&pgt_buffer.list));
-		del_page_from_list(page);
-#endif
 		list_del(list_next(&pgt_buffer.list));
 	}
 
@@ -292,7 +289,8 @@ int init_task_page_table(struct task_page_table *table)
 		}
 
 		table->pde_base = base;
-		table->temp_buffer_base = get_free_page(GFP_PGT);
+		table->temp_buffer_base =
+			(unsigned long)get_free_page(GFP_PGT);
 		if (!table->temp_buffer_base) {
 			release_pde(base);
 			return -ENOMEM;
@@ -327,7 +325,7 @@ int pgt_init(void)
 	size_t size;
 	int i; u32 align;
 	struct page *page;
-	int count = PGT_ALLOC_BUFFER_MIN;
+	int count = CONFIG_PGT_PDE_BUFFER_MIN;
 
 	/* this function needed called after mmu is init */
 	memset((char *)&pgt_buffer, 0, sizeof(struct pgt_buffer));

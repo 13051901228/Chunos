@@ -17,32 +17,27 @@
 #define __GFP_KERNEL		0x00000001
 #define __GFP_DMA		0x00000002
 #define __GFP_RES		0x00000004
+#define __GFP_USER		0x00000008
 #define GFP_ZONE_ID_MASK	0x0000000f
 
 /* indicate the usage of the memory */
-#define __GFP_PGT		0x00000010
-#define __GFP_PAGE_HEADER	0x00000020
-#define __GFP_SLAB		0x00000040
-#define __GFP_USER		0x00000080
+#define __GFP_PGT		0x00000100
+#define __GFP_MMAP		0x00000200
+#define __GFP_SLAB		0x00000400
+
+#define __GFP_PAGE_HEADER	0x00010000
 
 #define GFP_KERNEL		(__GFP_KERNEL)
-#define GFP_USER		(__GFP_KERNEL | __GFP_USER)
+#define GFP_USER		(__GFP_USER)
 #define GFP_RES			(__GFP_RES)
 #define GFP_PGT			(__GFP_KERNEL | __GFP_PGT)
 #define GFP_DMA			(__GFP_DMA)
 #define GFP_SLAB		(__GFP_KERNEL | __GFP_SLAB)
-#define __GFP_MASK		(__GFP_PGT | __GFP_USER | __GFP_SLAB)
+#define GFP_MMAP		(__GFP_USER | __GFP_MMAP)
+#define __GFP_MASK		(0xffffffff)
 
-struct user_page_attr {
-};
-
-struct slab_page_attr {
-
-};
-
-struct mmap_page_attr {
-
-};
+#define MEM_TYPE_GROW_UP	1
+#define MEM_TYPE_GROW_DOWN	0
 
 /*
  * page: represent 4k in physical memory
@@ -58,12 +53,6 @@ struct page {
 	struct list_head plist;
 	u32 count : 16;
 	u32 map_type : 1;
-
-	union {
-		struct user_page_attr user_page_attr;
-		struct slab_page_attr slab_page_attr;
-		struct mmap_page_attr mmap_page_attr;
-	};
 } __attribute__((packed));
 
 void free_pages(void *addr);
@@ -74,19 +63,9 @@ struct page *request_pages(int count, int flag);
 
 struct page *va_to_page(unsigned long va);
 
-unsigned long pa_to_va(unsigned long pa);
-
 unsigned long page_to_va(struct page *page);
-
-void copy_page_va(unsigned long target, unsigned long source);
-
-void copy_page_pa(unsigned long target, unsigned long source);
 
 struct page *pa_to_page(unsigned long pa);
-
-unsigned long va_to_pa(unsigned long va);
-
-unsigned long page_to_va(struct page *page);
 
 unsigned long page_to_pa(struct page *page);
 

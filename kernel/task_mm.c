@@ -16,18 +16,13 @@
 #include <os/memory_map.h>
 #include <os/mirros.h>
 
-#define MEM_TYPE_GROW_UP	1
-#define MEM_TYPE_GROW_DOWN	0
-
-static size_t init_max_alloc_size[TASK_MM_SECTION_MAX] = {
-	SIZE_1M, SIZE_NK(16), 0
-};
-
-static void free_sections_memory(struct task_mm_section *section)
+static void free_sections_memory(struct mm_struct *mm)
 {
 	int i;
+	struct task_mm_section *section;
 	
 	for (i = 0; i < TASK_MM_SECTION_MAX; i++) {
+		section = &mm->mm_section[i];
 		free_pages_on_list(&section->alloc_mem);
 		section++;
 	}
@@ -36,7 +31,7 @@ static void free_sections_memory(struct task_mm_section *section)
 static void release_task_memory(struct mm_struct *mm)
 {
 	free_task_page_table(&mm->page_table);
-	free_sections_memory(mm->mm_section);
+	free_sections_memory(mm);
 }
 
 static void init_task_mm_section(struct mm_struct *mm, int i)
@@ -50,7 +45,7 @@ static void init_task_mm_section(struct mm_struct *mm, int i)
 	case TASK_MM_SECTION_RO:
 		section->section_size =
 			elf_memory_size(mm->elf_file);
-		section->base_addr = elf_get_base_addr(mm->elf_file);
+		section->base_addr = elf_get_elf_base(mm->elf_file);
 		break;
 
 	case TASK_MM_SECTION_STACK:
@@ -109,7 +104,6 @@ static int section_get_memory(int count,
 	if (count <= 0)
 		return -EINVAL;
 
-#define GFP_MMAP	0
 	if (section->flag & TASK_MM_SECTION_MMAP)
 		flag = GFP_MMAP;
 	else
@@ -174,7 +168,7 @@ int task_mm_load_elf_image(struct mm_struct *mm)
 	if (ret == -ENOMEM)
 		return -ENOMEM;
 	
-	ret = pgt_map_task_memory(mm->page_table,
+	ret = pgt_map_task_memory(&mm->page_table,
 			&section->alloc_mem,
 			section->base_addr, MEM_TYPE_GROW_UP);
 	if (ret)
@@ -230,7 +224,7 @@ static int copy_task_mm_section(struct mm_struct *nmm,
 	 */
 	ret = pgt_map_task_memory(&nmm->page_table,
 			&n->alloc_mem,
-			&n->base_addr, type);
+			n->base_addr, type);
 	if (ret)
 		return ret;
 
@@ -358,7 +352,7 @@ int copy_task_memory(struct task_struct *new,
 	return 0;
 
 err:
-	free_sections_memory(nmm->mm_section);
+	free_sections_memory(nmm);
 	return -ENOMEM;
 }
 
@@ -451,6 +445,7 @@ int task_mm_copy_sigreturn(struct mm_struct *mm,
 		return -EINVAL;
 
 	memcpy((char *)load_base, start, size);
+	return 0;
 }
 
 static int init_task_meta_section(struct mm_struct *mm)

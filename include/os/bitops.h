@@ -11,7 +11,8 @@ typedef enum bit_ops {
 } bit_ops_t;
 
 #define bits_of(type)	(sizeof(type) * 8)
-#define bits_to_long(n)  (((n & 0xffffffc0) / (sizeof(u32) * 8) ) + 1)   
+#define bits_to_long(n)  \
+	((((n) & 0xffffffc0) / (sizeof(u32) * 8) ) + 1)
 #define DECLARE_BITMAP(name, n) \
 	u32 name[bits_to_long(n)]
 

@@ -153,7 +153,20 @@ struct elf_file {
 };
 
 void release_elf_file(struct elf_file *file);
+
 struct elf_file *get_elf_info(struct file *file);
+
 size_t elf_memory_size(struct elf_file *efile);
+
+int elf_load_elf_image(struct elf_file *efile,
+		unsigned long tar, size_t size);
+
+void inline release_elf_file(struct elf_file *efile);
+
+size_t inline elf_memory_size(struct elf_file *efile);
+
+unsigned long inline elf_get_elf_base(struct elf_file *efile);
+
+struct elf_file *dup_elf_info(struct elf_file *src);
 
 #endif

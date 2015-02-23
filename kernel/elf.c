@@ -157,7 +157,7 @@ size_t inline elf_memory_size(struct elf_file *efile)
 	return efile->elf_size;
 }
 
-unsigned long inline elf_get_base_addr(struct elf_file *efile)
+unsigned long inline elf_get_elf_base(struct elf_file *efile)
 {
 	return 0;
 }

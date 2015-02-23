@@ -35,7 +35,18 @@ struct task_page_table {
 	int temp_buffer_nr;
 };
 
-int map_task_address(struct task_page_table *table,
-		unsigned long va, unsigned long user_addr);
 void free_task_page_table(struct task_page_table *pgt);
+
+int init_task_page_table(struct task_page_table *table);
+
+int pgt_map_task_memory(struct task_page_table *table,
+		struct list_head *mem_list,
+		unsigned long map_base, int type);
+
+struct list_head *pgt_map_temp_memory(struct list_head *head,
+		int *count, int *nr, int type);
+
+int pgt_map_task_page(struct task_page_table *table,
+		unsigned long pa, unsigned long user_addr);
+
 #endif

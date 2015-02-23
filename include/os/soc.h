@@ -17,6 +17,7 @@
 #define NORMAL_MEM		0
 #define DMA_MEM			1
 #define RES_MEM			2
+#define UNKNOWN_MEM		3
 
 struct memory_region {
 	u32 start;
