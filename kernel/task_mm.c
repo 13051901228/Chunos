@@ -28,7 +28,7 @@ static void free_sections_memory(struct mm_struct *mm)
 	}
 }
 
-static void release_task_memory(struct mm_struct *mm)
+void task_mm_release_task_memory(struct mm_struct *mm)
 {
 	free_task_page_table(&mm->page_table);
 	free_sections_memory(mm);
@@ -288,7 +288,7 @@ static int copy_task_mmap(struct mm_struct *new,
 		pp = list_to_page(pl);
 		
 		ret = pgt_map_task_page(&new->page_table,
-				page_to_pa(np), page_to_va(pp));
+				np, page_to_va(pp));
 		if (ret)
 			return ret;
 
@@ -304,7 +304,7 @@ static int copy_task_mmap(struct mm_struct *new,
 	return 0;
 }
 
-int copy_task_memory(struct task_struct *new,
+int task_mm_copy_task_memory(struct task_struct *new,
 		struct task_struct *parent)
 {
 	struct mm_struct *pmm = &parent->mm_struct;

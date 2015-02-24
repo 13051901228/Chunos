@@ -11,6 +11,8 @@
 #include <os/elf.h>
 #include <os/pgt.h>
 
+struct task_struct;
+
 /*
  * SECTION_RO : text data and bss of the elf file
  * SECTION_STACK : stack section
@@ -58,5 +60,20 @@ struct mm_struct {
 	struct task_page_table page_table;
 	struct task_mm_section mm_section[TASK_MM_SECTION_MAX];
 };
+
+void task_mm_release_task_memory(struct mm_struct *mm);
+
+int task_mm_load_elf_image(struct mm_struct *mm);
+
+int task_mm_copy_task_memory(struct task_struct *new,
+		struct task_struct *parent);
+
+int task_mm_setup_argenv(struct mm_struct *mm,
+		char *name, char **argv, char **envp);
+
+int task_mm_copy_sigreturn(struct mm_struct *mm,
+		char *start, int size);
+
+int init_mm_struct(struct task_struct *task);
 
 #endif

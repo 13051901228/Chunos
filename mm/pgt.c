@@ -171,7 +171,7 @@ static int pgt_map_new_pde_entry(struct task_page_table *table,
 }
 
 int pgt_map_task_page(struct task_page_table *table,
-		unsigned long pa, unsigned long user_addr)
+		struct page *page, unsigned long user_addr)
 {
 	unsigned long pde_addr = 0;
 	unsigned long pte_addr = 0;
@@ -189,7 +189,11 @@ int pgt_map_task_page(struct task_page_table *table,
 			return -ENOMEM;
 	}
 
-	return mmu_create_pte_entry(pte_addr, pa, user_addr);
+	mmu_create_pte_entry(pte_addr,
+			page_to_pa(page), user_addr);
+	page_set_map_address(page, user_addr);
+
+	return 0;
 }
 
 struct list_head *pgt_map_temp_memory(struct list_head *head,
@@ -255,13 +259,13 @@ int pgt_map_task_memory(struct task_page_table *table,
 	if (type) {
 		list_for_each(mem_list, list) {
 			page = list_to_page(list);
-			pgt_map_task_page(table, page_to_pa(page), base);
+			pgt_map_task_page(table, page, base);
 			base += PAGE_SIZE;
 		}
 	} else {
 		list_for_each(mem_list, list) {
 			page = list_to_page(list);
-			pgt_map_task_page(table, page_to_pa(page), base);
+			pgt_map_task_page(table, page, base);
 			base -= PAGE_SIZE;
 		}
 	}

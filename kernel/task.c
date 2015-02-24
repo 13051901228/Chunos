@@ -80,178 +80,27 @@ static int inline release_kernel_stack(struct task_struct *task)
 
 static int release_task_memory(struct task_struct *task)
 {
-	/* TBD */
 	release_kernel_stack(task);
+	task_mm_release_task_memory(&task->mm_struct);
 
 	return 0;
 }
 
-#define mmap_start(start)	\
-	(start - PROCESS_USER_MMAP_BASE)
-
-#define mmap_pos_x(start)	\
-	(mmap_start(start) / SIZE_NM(4))
-
-#define mmap_pos_y(start)	\
-	((mmap_start(start) % SIZE_NM(4)) >> PAGE_SHIFT)
-
 int mmap(struct task_struct *task, unsigned long start,
 	 unsigned long virt, int flags, int fd, offset_t off)
 {
-#if 0
-	struct mm_struct *ms = &task->mm_struct;
-	int i, j;
-	struct list_head *list = &ms->mmap_page_list;
-	unsigned long *page_table;
-	struct page *page;
-
-	i = mmap_pos_x(start);
-	j = mmap_pos_y(start);
-
-	do {
-		list = list_next(list);
-		i--;
-	} while (i >= 0);
-
-	page = list_entry(list, struct page, pgt_list);
-	page_table = (unsigned long *)page->free_base;
-	page_table += j;
-
-	if (*page_table != 0)
-		return -EAGAIN;
-
-	/* flag to be done */
-	build_page_table_entry((unsigned long)page_table, virt, PAGE_SIZE, 0);
-
-	/* after map we need flus the cache and invaild the TLB */
-	flush_mmu_tlb();
-	flush_cache();
-
-	/* update the mmap information, the mmap fd information
-	 * is stored in the page->free_base
-	 */
-	page = va_to_page(virt);
-	list_add_tail(&ms->mmap_mem_list, &page->plist);
-	page->flag |= __GFP_USER;
-	page->free_base = (virt & 0xfffff000) | (mmap_magic(fd));
-	page->mmap_offset = off;
-#endif
 	return 0;
 }
 
 int munmap(struct task_struct *task, unsigned long start,
 		size_t length, int flags, int sync)
 {
-#if 0
-	struct mm_struct *ms = &task->mm_struct;
-	int bit_start;
-	int i, j;
-	struct list_head *list = &ms->mmap_page_list;
-	unsigned long *page_table;
-	unsigned long buffer;
-	struct page *page;
-	struct page *tmp;
-	int fd = 0xff;
-	int pages = page_nr(length);
-	size_t size;
-
-	bit_start = mmap_start(start) >> PAGE_SHIFT;
-	i = mmap_pos_x(start);
-	j = mmap_pos_y(start);
-	
-	do {
-		list = list_next(list);
-		i--;
-	} while (i >= 0);
-
-	page = list_entry(list, struct page, pgt_list);
-	page_table = (unsigned long *)page->free_base;
-	page_table += j;
-
-	for (i = 0; i < pages; i++) {
-		/* next page table */
-		if (j == 1024) {
-			j = 0;
-			list = list_next(list);
-			page = list_entry(list, struct page, pgt_list);
-			page_table = (unsigned long *)page->free_base;
-			page_table += j;
-		}
-
-		if (*page_table == 0) {
-			kernel_error("bug, memory is not maped please check\n");
-			j++;
-			page_table++;
-			continue;
-		}
-
-		/* get the va of the mem */
-		buffer = *page_table & 0xfffff000;
-		buffer = pa_to_va(buffer);
-		tmp = va_to_page(buffer);
-
-		/* sync is 1: do msync else do munmap */
-		if (sync) {
-			fd = mmap_addr2fd(tmp->free_base);
-			if (fd != 0xff) {
-				size = length > PAGE_SIZE ? PAGE_SIZE : length;
-				if (fmsync(fd, (char *)buffer, size, tmp->mmap_offset) != size) {
-					kernel_warning("fmsync failed fd:%d offset:0x%x\n",
-							fd, tmp->mmap_offset);
-				}
-				length -= size;
-			}
-		} else {
-			list_del(&tmp->plist);
-			if (read_bit(ms->mmap, bit_start + i))
-				clear_bit(ms->mmap, bit_start + i);
-
-			kfree((void *)buffer);
-			*page_table = 0;
-		}
-
-		page_table++;
-	}
-
-	/* if is munmap flush the cache */
-	if (!sync) {
-		flush_mmu_tlb();
-		flush_cache();
-	}
-#endif
 	return 0;
 }
 
-unsigned long get_mmap_user_base(struct task_struct *task, int page_nr)
+unsigned long
+get_mmap_user_base(struct task_struct *task, int page_nr)
 {
-#if 0
-	struct mm_struct *ms = &task->mm_struct;
-	unsigned long start;
-	int i, j, k;
-
-	/* find continous pages to map, shall we add a spin_lock ?*/
-	kernel_debug("ms->free_pos is %d\n", ms->free_pos);
-	i = bitmap_find_free_base(ms->mmap, ms->free_pos,
-			0, ms->mmap_nr, page_nr);
-	if (i < 0) {
-		kernel_error("no free user space for mmap\n");
-		return 0;
-	}
-
-	/* calculate the free base of the user space
-	 * j is the n list, k is the pos in the list*/
-	j = i / 1024;
-	k = i % 1024;
-
-	start = PROCESS_USER_MMAP_BASE + (j * SIZE_NM(4)) + (k * PAGE_SIZE);
-
-	/* mask the memory will be used */
-	for (j = 0; j < page_nr; j++) {
-		set_bit(ms->mmap, i);
-		i++;
-	}
-	ms->free_pos = (i >= ms->mmap_nr ? 0 : i);
-#endif
 	return 0;
 }
 
@@ -276,9 +125,7 @@ static int copy_process(struct task_struct *new)
 {
 	struct task_struct *old = new->parent;
 
-	if (old) {
-		copy_task_memory(old, new);
-	}
+	task_mm_copy_task_memory(old, new);
 
 	return 0;
 }
@@ -291,7 +138,7 @@ static int set_up_task_stack(struct task_struct *task, pt_regs *regs)
 	 * in arm, stack is grow from up to down,so we 
 	 * adjust it;
 	 */
-	if (task->stack_origin == NULL) {
+	if (task->stack_origin == 0) {
 		kernel_error("task kernel stack invailed\n");
 		return -EFAULT;
 	}
@@ -450,10 +297,8 @@ int kthread_run(char *name, int (*fn)(void *arg), void *arg)
 
 void release_task(struct task_struct *task)
 {
-	if (task) {
-		release_task_memory(task);
-		kfree(task);
-	}
+	release_task_memory(task);
+	kfree(task);
 }
 
 int task_kill_self(struct task_struct *task)

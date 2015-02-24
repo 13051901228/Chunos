@@ -18,7 +18,7 @@
 #define __GFP_DMA		0x00000002
 #define __GFP_RES		0x00000004
 #define __GFP_USER		0x00000008
-#define GFP_ZONE_ID_MASK	0x0000000f
+#define GFP_ZONE_ID_MASK	0x000000ff
 
 /* indicate the usage of the memory */
 #define __GFP_PGT		0x00000100
@@ -52,7 +52,6 @@ struct page {
 	unsigned long flag;
 	struct list_head plist;
 	u32 count : 16;
-	u32 map_type : 1;
 } __attribute__((packed));
 
 void free_pages(void *addr);
@@ -84,5 +83,8 @@ static inline void *get_free_page(unsigned long flag)
 {
 	return get_free_pages(1, flag);
 }
+
+void inline
+page_set_map_address(struct page *page, unsigned long addr);
 
 #endif

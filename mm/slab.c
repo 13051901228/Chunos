@@ -298,6 +298,9 @@ static void *__kmalloc(int size, int flag)
 		NULL,
 	};
 
+	if (flag & __GFP_USER)
+		return NULL;
+
 	size = get_slab_alloc_size(size);
 
 	if ((flag != GFP_KERNEL) || (size >= PAGE_SIZE))

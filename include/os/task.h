@@ -1,3 +1,9 @@
+/*
+ * include/os/task.h
+ *
+ * Created by Le Min (lemin9538@163.com)
+ */
+
 #ifndef _TASK_H
 #define _TASK_H
 
@@ -114,8 +120,11 @@ static inline int task_is_user(struct task_struct *task)
 }
 
 int kthread_run(char *name, int (*fn)(void *arg), void *arg);
+
 int kernel_exec(char *filename);
+
 int kill_task(struct task_struct *task);
+
 int task_kill_self(struct task_struct *task);
 
 static inline pt_regs *get_pt_regs(void)
@@ -126,7 +135,11 @@ static inline pt_regs *get_pt_regs(void)
 int mmap(struct task_struct *task, unsigned long start,
 		unsigned long virt, int flags,
 		int fd, offset_t offset);
-int munmap(struct task_struct *task, unsigned long start, size_t length, int flags, int sync);
-unsigned long get_mmap_user_base(struct task_struct *task, int page_nr);
+
+int munmap(struct task_struct *task, unsigned long start,
+		size_t length, int flags, int sync);
+
+unsigned long
+get_mmap_user_base(struct task_struct *task, int page_nr);
 
 #endif

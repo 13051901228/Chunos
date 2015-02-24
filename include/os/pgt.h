@@ -47,6 +47,6 @@ struct list_head *pgt_map_temp_memory(struct list_head *head,
 		int *count, int *nr, int type);
 
 int pgt_map_task_page(struct task_page_table *table,
-		unsigned long pa, unsigned long user_addr);
+		struct page *page, unsigned long user_addr);
 
 #endif
