@@ -967,7 +967,7 @@ static void __free_pages(struct mm_section *section, struct page *page)
 	update_memory_bitmap(section->bitmap, index, count, 0);
 
 	for (i = 0; i < count; i++) {
-		page->flag = 0;
+		memset((char *)page, 0, sizeof(struct page));
 		page++;
 	}
 
@@ -1167,7 +1167,26 @@ inline struct page *list_to_page(struct list_head *list)
 }
 
 void inline
-page_set_map_address(struct page *page, unsigned long addr)
+page_set_map_address(struct page *page,
+		    unsigned long addr)
 {
 	page->map_address = addr;
+}
+
+unsigned long
+page_get_map_address(struct page *page)
+{
+	return page->map_address;
+}
+
+void inline
+page_set_pdata(struct page *page, unsigned long data)
+{
+	page->pdata = data;
+}
+
+unsigned long inline
+page_get_pdata(struct page *page)
+{
+	return page->pdata;
 }

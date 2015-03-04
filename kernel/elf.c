@@ -45,8 +45,8 @@ int elf_load_elf_image(struct elf_file *efile,
 		load_size = section->load_addr +
 			    section->size - tar;
 		bss_size = MIN(load_size, size);
-		tar += rodata_size;
-		size -= rodata_size;
+		tar += bss_size;
+		size -= bss_size;
 	}
 
 	if (size != 0)

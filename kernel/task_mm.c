@@ -97,11 +97,12 @@ static void copy_mm_section_info(struct mm_struct *c,
 static int section_get_memory(int count,
 		struct task_mm_section *section)
 {
-	struct page *page;
 	int i;
 	int flag;
+	struct page *page;
+	struct list_head *list;
 
-	if (count <= 0)
+	if (count == 0)
 		return -EINVAL;
 
 	if (section->flag & TASK_MM_SECTION_MMAP)
@@ -109,14 +110,29 @@ static int section_get_memory(int count,
 	else
 		flag = GFP_USER;
 
-	for (i = 0; i < count; i++) {
-		page = request_pages(1, flag);
-		if (!page)
-			return -ENOMEM;
+	/*
+	 * if need more page allocate page for section
+	 * else will free unused page from the list
+	 */
+	if (count > 0) {
+		for (i = 0; i < count; i++) {
+			page = request_pages(1, flag);
+			if (!page)
+				return -ENOMEM;
 
-		add_page_to_list_tail(page, &section->alloc_mem);
-		section->alloc_pages++;
-		section->mapped_size += PAGE_SIZE;
+			add_page_to_list_tail(page,
+					&section->alloc_mem);
+			section->alloc_pages++;
+			section->mapped_size += PAGE_SIZE;
+		}
+	} else {
+		while (count != 0) {
+			list = &section->alloc_mem;
+			list = list_prve(list);
+			page = list_to_page(list);
+			release_page(page);
+			count++;
+		}
 	}
 
 	return 0;
@@ -132,16 +148,13 @@ static int alloc_task_user_stack(struct mm_struct *mm)
 
 	nr_page = 4 - section->alloc_pages;
 
-	if (nr_page > 0)
-		ret = section_get_memory(nr_page, section);
-
+	ret = section_get_memory(nr_page, section);
 	if (ret)
 		return ret;
 
 	return pgt_map_task_memory(&mm->page_table,
 			&section->alloc_mem,
-			section->base_addr,
-			MEM_TYPE_GROW_DOWN);
+			section->base_addr, PGT_MAP_STACK);
 }
 
 
@@ -170,7 +183,7 @@ int task_mm_load_elf_image(struct mm_struct *mm)
 	
 	ret = pgt_map_task_memory(&mm->page_table,
 			&section->alloc_mem,
-			section->base_addr, MEM_TYPE_GROW_UP);
+			section->base_addr, PGT_MAP_NORMAL);
 	if (ret)
 		return ret;
 
@@ -246,7 +259,7 @@ static inline int copy_task_elf(struct mm_struct *new,
 {
 	return copy_task_mm_section(new, p,
 			TASK_MM_SECTION_RO,
-			MEM_TYPE_GROW_UP);
+			PGT_MAP_NORMAL);
 }
 
 static inline int copy_task_stack(struct mm_struct *new,
@@ -254,7 +267,7 @@ static inline int copy_task_stack(struct mm_struct *new,
 {
 	return copy_task_mm_section(new, p,
 			TASK_MM_SECTION_STACK,
-			MEM_TYPE_GROW_UP);
+			PGT_MAP_STACK);
 }
 
 static inline int copy_task_meta(struct mm_struct *new,
@@ -262,7 +275,7 @@ static inline int copy_task_meta(struct mm_struct *new,
 {
 	return copy_task_mm_section(new, p,
 			TASK_MM_SECTION_META,
-			MEM_TYPE_GROW_UP);
+			PGT_MAP_NORMAL);
 }
 
 static int copy_task_mmap(struct mm_struct *new,
@@ -287,13 +300,13 @@ static int copy_task_mmap(struct mm_struct *new,
 		np = list_to_page(nl);
 		pp = list_to_page(pl);
 		
-		ret = pgt_map_task_page(&new->page_table,
-				np, page_to_va(pp));
+		ret = pgt_map_mmap_page(&new->page_table,
+				np, page_get_map_address(pp));
 		if (ret)
 			return ret;
 
 		temp = pgt_map_temp_memory(list, NULL,
-				NULL, MEM_TYPE_GROW_UP);
+				NULL, PGT_MAP_MMAP);
 		if (!temp)
 			return -EFAULT;
 
@@ -461,9 +474,34 @@ static int init_task_meta_section(struct mm_struct *mm)
 	if (pgt_map_task_memory(&mm->page_table,
 				&section->alloc_mem,
 				section->base_addr,
-				MEM_TYPE_GROW_UP))
+				PGT_MAP_NORMAL))
 		return -EFAULT;
 
+	return 0;
+}
+
+int task_mm_mmap(struct mm_struct *mm,
+		unsigned long start, int nr,
+		int flags, int fd, offset_t off)
+{
+	int ret;
+	unsigned ua;
+
+	if (start) {
+		ret = pgt_check_mmap_addr(&mm->page_table, start, nr);
+		if (ret)
+			return 0;
+
+		ua = start;
+	}
+
+	return 0;
+}
+
+int task_mm_munmap(struct mm_struct *mm,
+		unsigned long start, size_t length,
+		int flags, int sync)
+{
 	return 0;
 }
 
@@ -509,21 +547,19 @@ int init_mm_struct(struct task_struct *task)
 		}
 	}
 
+	ret = init_task_page_table(&mm->page_table);
+	if (ret)
+		return ret;
+
 	/*
 	 * if task is a user task, need to allocate
 	 * user stack for it.
 	 */
-	if (task_is_user(task)) {
-		ret = alloc_task_user_stack(mm);
-		if (ret)
-			return ret;
+	ret = alloc_task_user_stack(mm);
+	if (ret)
+		return ret;
 
-		ret = init_task_meta_section(mm);
-		if (ret)
-			return ret;
-	}
-
-	ret = init_task_page_table(&mm->page_table);
+	ret = init_task_meta_section(mm);
 	if (ret)
 		return ret;
 

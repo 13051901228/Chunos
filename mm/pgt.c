@@ -83,34 +83,35 @@ static int release_pde(unsigned long base)
 	return 0;
 }
 
-static int init_pte(struct task_page_table *table)
+static int init_pte_cache_list(struct pte_cache_list *clist)
 {
-	struct page *page;
-
-	if (table->pte_alloc_size) {
-		table->pte_current_page = list_next(&table->pte_list);
-		page = list_to_page(list_next(&table->pte_list));
-		table->pte_free_size = table->pte_alloc_size - PAGE_SIZE;
-		table->pte_free_base = page_to_va(page);
-		table->pte_current_free = PAGE_SIZE;
+	if (clist->pte_alloc_size) {
+		clist->pte_current_page = &clist->pte_list;
+		clist->pte_free_size = clist->pte_alloc_size;
 	} else {
-		init_list(&table->pte_list);
-		table->pte_alloc_size = 0;
-		table->pte_free_size = 0;
-		table->pte_free_base = 0;
-		table->pte_current_free = 0;
-		table->pte_current_page = NULL;
+		init_list(&clist->pte_list);
+		clist->pte_alloc_size = 0;
+		clist->pte_free_size = 0;
+		clist->pte_current_page = &clist->pte_list;
 	}
 
 	return 0;
 }
 
-static unsigned long alloc_new_pte(struct task_page_table *table)
+static int init_pte(struct task_page_table *table)
+{
+	init_pte_cache_list(&table->task_list);
+	init_pte_cache_list(&table->mmap_list);
+
+	return 0;
+}
+
+static unsigned long alloc_new_pte(struct pte_cache_list *clist)
 {
 	struct page *page;
 	unsigned long pte_free_base = 0;
 
-	if (table->pte_free_size) {
+	if (!clist->pte_free_size) {
 		/* 
 		 * alloc new page for pte pgt
 		 */
@@ -118,72 +119,61 @@ static unsigned long alloc_new_pte(struct task_page_table *table)
 		if (!page)
 			return -ENOMEM;
 
-		add_page_to_list_tail(page, &table->pte_list);
-		table->pte_current_page = list_prve(&table->pte_list);
-
+		add_page_to_list_tail(page, &clist->pte_list);
 		pte_free_base = page_to_va(page);
 		memset((char *)pte_free_base, 0, PAGE_SIZE);
 
-		table->pte_alloc_size += PAGE_SIZE;
-		table->pte_free_size = PAGE_SIZE;
-		table->pte_current_free = PAGE_SIZE;
-		table->pte_free_base = pte_free_base;
+		clist->pte_alloc_size += PAGE_SIZE;
 	} else {
 		/*
 		 * fetch a new page from the pte_list
 		 */
-		table->pte_current_page = list_next(table->pte_current_page);
-		page = list_to_page(table->pte_current_page);
-		table->pte_free_size -= PAGE_SIZE;
-		table->pte_current_free = PAGE_SIZE;
-		table->pte_free_base = page_to_va(page);
-		pte_free_base = table->pte_free_base;
+		clist->pte_current_page =
+			list_next(clist->pte_current_page);
+		page = list_to_page(clist->pte_current_page);
+		clist->pte_free_size -= PAGE_SIZE;
+		pte_free_base = page_to_va(page);
 		memset((void *)pte_free_base, 0 , PAGE_SIZE);
 	}
 
 	return pte_free_base;
 }
 
-static int pgt_map_new_pde_entry(struct task_page_table *table,
+static int pgt_map_new_pde_entry(struct pte_cache_list *clist,
 		unsigned long pde_entry_addr,
 		unsigned long user_address)
 {
-	unsigned long pte_free_base = table->pte_free_base;
-	int size;
+	unsigned long pte_free_base;
+	int ret;
 	
 	/* alloc new memory for pte pgt */
-	if (!table->pte_current_free) {
-		pte_free_base = alloc_new_pte(table);
-		if (!pte_free_base)
-			return -ENOMEM;
-	}
+	pte_free_base = alloc_new_pte(clist);
+	if (!pte_free_base)
+		return -ENOMEM;
 
-	size = mmu_create_pde_entry(pde_entry_addr,
-			table->pte_free_base, user_address);
-	if (!size)
+	ret = mmu_create_pde_entry(pde_entry_addr,
+			pte_free_base, user_address);
+	if (!ret)
 		return -EINVAL;
-
-	table->pte_free_size -= size;
-	table->pte_current_free -= size;
-	table->pte_free_base += size;
 
 	return pte_free_base;
 }
 
-int pgt_map_task_page(struct task_page_table *table,
-		struct page *page, unsigned long user_addr)
+static int __pgt_map_page(struct pte_cache_list *clist,
+		unsigned long pde_base, struct page *page,
+		unsigned long user_addr)
 {
 	unsigned long pde_addr = 0;
 	unsigned long pte_addr = 0;
 
-	pde_addr = mmu_get_pde_entry(table->pde_base, user_addr);
+	pde_addr = mmu_get_pde_entry(pde_base, user_addr);
 	pte_addr = *(unsigned long *)pde_addr;
 
 	/*
 	 * the pte pgt is not ready need to map new
 	 */
 	if (!pte_addr) {
-		pte_addr = pgt_map_new_pde_entry(table,
+		pte_addr = pgt_map_new_pde_entry(clist,
 				pde_addr, user_addr);
 		if (!pte_addr)
 			return -ENOMEM;
@@ -194,9 +184,11 @@ int pgt_map_task_page(struct task_page_table *table,
 	page_set_map_address(page, user_addr);
 
 	return 0;
+
 }
 
-struct list_head *pgt_map_temp_memory(struct list_head *head,
+static struct list_head *
+__pgt_map_temp_memory(struct list_head *head,
 		int *count, int *nr, int type)
 {
 	int max, i;
@@ -245,7 +237,8 @@ struct list_head *pgt_map_temp_memory(struct list_head *head,
 	return list;
 }
 
-int pgt_map_task_memory(struct task_page_table *table,
+static int
+__pgt_map_task_memory(struct task_page_table *table,
 		struct list_head *mem_list,
 		unsigned long map_base, int type)
 {
@@ -273,6 +266,43 @@ int pgt_map_task_memory(struct task_page_table *table,
 	return 0;
 }
 
+int pgt_map_task_memory(struct task_page_table *table,
+		struct list_head *mem_list,
+		unsigned long map_base, int type)
+{
+	if (type == PGT_MAP_STACK)
+		return __pgt_map_task_memory(table,
+				mem_list, map_base, 0);
+
+	return __pgt_map_task_memory(table,
+			mem_list, map_base, 1);
+}
+
+struct list_head *pgt_map_temp_memory(struct list_head *head,
+		int *count, int *nr, int type)
+{
+	if (type == PGT_MAP_STACK)
+		return __pgt_map_temp_memory(head,
+				count, nr, MEM_TYPE_GROW_DOWN);
+
+	return __pgt_map_temp_memory(head,
+			count, nr, MEM_TYPE_GROW_UP);
+}
+
+int pgt_map_task_page(struct task_page_table *table,
+		struct page *page, unsigned long user_addr)
+{
+	return __pgt_map_page(&table->task_list,
+			table->pde_base, page, user_addr);
+}
+
+int pgt_map_mmap_page(struct task_page_table *table,
+		struct page *page, unsigned long user_addr)
+{
+	return __pgt_map_page(&table->task_list,
+			table->pde_base, page, user_addr);
+}
+
 int init_task_page_table(struct task_page_table *table)
 {
 	unsigned long base = 0;
@@ -284,15 +314,16 @@ int init_task_page_table(struct task_page_table *table)
 	 * if the page table has been alloced
 	 * we reinit the pde and pte page table
 	 */
-	if (!table->pte_alloc_size) {
-		memset((char *)table, 0, sizeof(struct task_page_table));
-		base = alloc_new_pde();
-		if (!base) {
-			kernel_error("no memory for task pde\n");
+	if (!table->pde_base) {
+		memset((char *)table, 0,
+			sizeof(struct task_page_table));
+
+		table->pde_base = alloc_new_pde();
+		if (!table->pde_base) {
+			kernel_error("No memory for task PDE\n");
 			return -ENOMEM;
 		}
 
-		table->pde_base = base;
 		table->temp_buffer_base =
 			(unsigned long)get_free_page(GFP_PGT);
 		if (!table->temp_buffer_base) {
@@ -300,7 +331,8 @@ int init_task_page_table(struct task_page_table *table)
 			return -ENOMEM;
 		}
 
-		table->temp_buffer_nr = (PAGE_SIZE / sizeof(unsigned long));
+		table->temp_buffer_nr =
+			(PAGE_SIZE / sizeof(unsigned long));
 	}
 
 	/* 
@@ -321,7 +353,136 @@ void free_task_page_table(struct task_page_table *pgt)
 
 	/* free the pte page table memory */
 	pgt->pde_base = 0;
-	free_pages_on_list(&pgt->pte_list);
+	free_pages_on_list(&pgt->task_list.pte_list);
+	free_pages_on_list(&pgt->mmap_list.pte_list);
+}
+
+#define	PAGE_PER_LONG	(PAGE_SIZE / sizeof(unsigned long))
+static unsigned long
+pgt_get_page_mmap_base(struct page *page, int page_nr)
+{
+	unsigned long data, ua;
+	int start, nr;
+	unsigned long *addr, *temp;
+	int size = PAGE_PER_LONG;
+	int sum = 0, again = 0;
+
+	data = page_get_pdata(page);
+	start = data & 0xffff;
+	nr = (data & 0xffff0000) >> 16;
+	ua = page_to_va(page);
+	addr = (unsigned long *)ua;
+	ua += PAGE_SIZE;
+	addr += start;
+	temp = addr;
+
+	if ((size - nr) < page_nr)
+		return -EINVAL;
+
+	while (1) {
+		if (*addr == 0) {
+			sum++;
+			if (sum == page_nr)
+				goto exit_find;
+		} else {
+			sum = 0;
+		}
+
+		if ((unsigned long)addr == ua) {
+			again = 1;
+			sum = 0;
+			addr = (unsigned long *)page_to_va(page);
+		}
+
+		if (again) {
+			if (addr == temp)
+				break;
+		}
+	}
+
+	return 0;
+
+exit_find:
+	start = addr - (unsigned long *)page_to_va(page);
+	nr += page_nr;
+	pdata = (nr << 16) + start;
+	page_set_pdata(page, pdata);
+	addr -= page_nr;
+
+	return (unsigned long)addr;
+}
+
+static unsigned long
+get_new_mmap_base(struct task_page_table *table, int page_nr)
+{
+	unsigned long user_base, temp;
+	unsigned long pde_addr;
+
+	temp = user_base = table->mmap_current_base;
+
+	while (1) {
+		pde_addr = mmu_get_pde_entry(table->pde_base, user_base);
+		if (!pde_addr)
+			goto new_mmap_base;
+
+		user_base += ARCH_PDE_ALIGN_SIZE;
+		if (user_base == PROCESS_MMAP_END)
+			user_base = PROCESS_MMAP_BASE;
+
+		if (user_base == temp)
+			break;
+	}
+
+	return 0;
+
+new_mmap_base:
+	if (!pgt_map_new_pde_entry(&table->mmap_list,
+				pde_addr, user_base))
+		return -ENOMEM;
+
+	table->mmap_current_base =
+		user_base + PDE_ALIGN_SIZE;
+
+	return user_base;
+}
+
+unsigned long
+pgt_get_mmap_base(struct task_page_table *table, int page_nr)
+{
+	struct list_head *list;
+	unsigned long ua = 0;
+	struct page *page;
+	struct list_head *head = &table->mmap_list.pte_list;
+
+	list_for_each(head, list) {
+		page = list_to_page(list);
+		ua = pgt_get_page_mmap_base(page, page_nr);
+		if (ua > 0)
+			goto out;
+	}
+
+	ua = get_new_mmap_base(table, page_nr);
+
+out:
+	return ua;
+}
+
+int pgt_check_mmap_addr(struct task_page_table *table,
+		unsigned long start, int nr)
+{
+	unsigned long pte_addr;
+	unsigned long pde_addr;
+	int i;
+
+	pde_addr = pgt_get_pde_addr(table->pde_base, start);
+	if (!pde_addr)
+		return 0;
+
+	for (i = 0; i < nr; i++) {
+		pte_addr = pgt_get_pde_addr(pde_addr, start);
+		if
+	}
+
 }
 
 int pgt_init(void)

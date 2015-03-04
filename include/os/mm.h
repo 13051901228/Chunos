@@ -51,7 +51,9 @@ struct page {
 	unsigned long map_address;
 	unsigned long flag;
 	struct list_head plist;
-	u32 count : 16;
+	unsigned long count : 16;
+	unsigned long unused : 16;
+	unsigned long pdata;
 } __attribute__((packed));
 
 void free_pages(void *addr);
@@ -84,7 +86,10 @@ static inline void *get_free_page(unsigned long flag)
 	return get_free_pages(1, flag);
 }
 
-void inline
-page_set_map_address(struct page *page, unsigned long addr);
+void page_set_map_address(struct page *page, unsigned long addr);
+
+unsigned long page_get_map_address(struct page *page);
+
+void release_page(struct page *page);
 
 #endif

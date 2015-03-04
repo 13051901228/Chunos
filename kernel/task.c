@@ -86,24 +86,6 @@ static int release_task_memory(struct task_struct *task)
 	return 0;
 }
 
-int mmap(struct task_struct *task, unsigned long start,
-	 unsigned long virt, int flags, int fd, offset_t off)
-{
-	return 0;
-}
-
-int munmap(struct task_struct *task, unsigned long start,
-		size_t length, int flags, int sync)
-{
-	return 0;
-}
-
-unsigned long
-get_mmap_user_base(struct task_struct *task, int page_nr)
-{
-	return 0;
-}
-
 static int alloc_kernel_stack(struct task_struct *task)
 {
 	if(task->stack_base)
