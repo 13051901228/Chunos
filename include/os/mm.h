@@ -39,20 +39,36 @@
 #define MEM_TYPE_GROW_UP	1
 #define MEM_TYPE_GROW_DOWN	0
 
-/*
- * page: represent 4k in physical memory
- * phy_address: physic address this page maped to
- * flag: attribute of the page
- * count: how many continous page has
- * attr: specifical page's attribute
- */
 struct page {
+	/*
+	 * phy_address: the phy_address of this page
+	 * map_address: the address where this page maped to
+	 */
 	unsigned long phy_address;
 	unsigned long map_address;
+
+	/*
+	 * flag: flags of this page
+	 */
 	unsigned long flag;
+
+	/*
+	 * plist: used to connect other page
+	 */
 	struct list_head plist;
+
+	/*
+	 * count: how many continuous pages has
+	 * been allocated
+	 *
+	 * unused: to be done
+	 */
 	unsigned long count : 16;
-	unsigned long unused : 16;
+	unsigned long pinfo : 16;
+
+	/*
+	 * pdata: private data of this page
+	 */
 	unsigned long pdata;
 } __attribute__((packed));
 
@@ -91,5 +107,7 @@ void page_set_map_address(struct page *page, unsigned long addr);
 unsigned long page_get_map_address(struct page *page);
 
 void release_page(struct page *page);
+
+unsigned long page_get_pdata(struct page *page);
 
 #endif

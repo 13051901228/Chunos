@@ -10,8 +10,9 @@ void *os_mmap(void *start, size_t length, int prot,
 	struct task_struct *task = current;
 	int pages = 0;
 
-	kernel_debug("%s %x %x %x %x %x %x\n", __func__, (u32)start,
-			length, prot, flags, fd, offset);
+	kernel_debug("%s %x %x %x %x %x %x\n", __func__,
+			(unsigned long)start, length,
+			prot, flags, fd, offset);
 
 	if (!length)
 		return NULL;
@@ -22,7 +23,7 @@ void *os_mmap(void *start, size_t length, int prot,
 	pages = page_nr(length);
 
 	return task_mm_mmap(&task->mm_struct, start,
-			pages, flag, fd, offset);
+			pages, flags, fd, offset);
 }
 
 static int __os_munmap(unsigned long addr, size_t length,
@@ -34,7 +35,7 @@ static int __os_munmap(unsigned long addr, size_t length,
 	if (!is_aligin(addr, PAGE_SIZE))
 		return -EINVAL;
 
-	return munmap(current, addr, length, flags, sync);
+	return task_mm_munmap(current, addr, length, flags, sync);
 }
 
 int os_munmap(void *addr, size_t length)

@@ -23,6 +23,8 @@ struct pte_cache_list {
 	size_t pte_alloc_size;
 	size_t pte_free_size;
 	struct list_head *pte_current_page;
+	size_t pte_current_free;
+	unsigned long pte_free_base;
 };
 
 /*
@@ -37,12 +39,13 @@ struct task_page_table {
 	unsigned long pde_base_pa;
 
 	struct pte_cache_list task_list;
-	struct pte_cache_list mmap_list;
 
 	unsigned long temp_buffer_base;
 	int temp_buffer_nr;
 
 	unsigned long mmap_current_base;
+	struct list_head mmap_pte;
+	int mmap_pte_page_nr;
 };
 
 void free_task_page_table(struct task_page_table *pgt);

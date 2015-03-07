@@ -730,7 +730,7 @@ struct page *va_to_page(unsigned long va)
 
 unsigned long page_to_va(struct page *page)
 {
-	return (page->map_address);
+	return (page->map_address & 0xfffff000);
 }
 
 unsigned long page_to_pa(struct page *page)

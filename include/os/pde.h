@@ -1,0 +1,28 @@
+/*
+ * include/os/pde.h
+ *
+ * Created by Le Min at 2015/03/06
+ *
+ */
+
+#ifndef _PDE_H_
+#define _PDE_H_
+
+#include <asm/pde.h>
+
+#define PDE_MAP_SIZE		(ARCH_PDE_MAP_SIZE)
+#define PDE_ENTRY_SIZE		(ARCH_PDE_ENTRY_SIZE)
+#define PDE_ENTRY_SHIFT		(ARCH_PDE_ENTRY_SHIFT)
+#define PDE_TABLE_SIZE		(ARCH_PDE_TABLE_SIZE)
+#define PDE_TABLE_ALIGN_SIZE	(ARCH_PDE_TABLE_ALIGN_SIZE)
+
+#define PTES_PER_PDE		(ARCH_PTES_PER_PDE)
+#define PTE_ENTRY_SIZE		(ARCH_PTE_ENTRY_SIZE)
+#define PTE_TABLE_SIZE		(ARCH_PTE_TABLE_SIZE)
+
+#define MAP_SIZE_PER_PAGE	(ARCH_MAP_SIZE_PER_PAGE)
+
+#define PTE_TABLE_PER_PAGE	\
+	((MAP_SIZE_PER_PAGE / PTE_TABLE_SIZE) / PDE_MAP_SIZE)
+
+#endif
