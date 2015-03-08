@@ -5,8 +5,7 @@
 
 void svb_parse_memory_region(void)
 {
-	register_memory_region(0x0, 256 * 1024 * 1024, NORMAL_MEM);
-	register_memory_region(0x10000000, 768 * 1024 *1024, NORMAL_MEM);
+	register_memory_region(0x0, 1024 * 1024 * 1024, NORMAL_MEM);
 }
 
 static struct soc_board sofia_svb = {
