@@ -200,7 +200,7 @@ pgt_map_new_pde_entry(struct pte_cache_list *clist,
 
 	user_base = min_align(user_address, MAP_SIZE_PER_PAGE);
 	pde = pgt_get_pde_entry_addr(pde_base, user_base);
-	
+
 	/* alloc new memory for pte pgt */
 	page = alloc_new_pte_page(clist);
 	if (!page)
