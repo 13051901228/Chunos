@@ -480,28 +480,95 @@ static int init_task_meta_section(struct mm_struct *mm)
 	return 0;
 }
 
-int task_mm_mmap(struct mm_struct *mm,
-		unsigned long start, int nr,
+unsigned long task_mm_mmap(struct mm_struct *mm,
+		unsigned long start, size_t len,
 		int flags, int fd, offset_t off)
 {
-	int ret;
-	unsigned ua;
+	int i, ret = 0;
+	unsigned long ua, base;
+	struct page *page;
+	int nr = page_nr(len);
+	struct task_mm_section *mmap =
+		&mm->mm_section[TASK_MM_SECTION_MMAP];
 
 	if (start) {
-		ret = pgt_check_mmap_addr(&mm->page_table, start, nr);
+		ret = pgt_check_mmap_addr(&mm->page_table,
+				start, nr);
 		if (ret)
 			return 0;
 
 		ua = start;
+	} else {
+		ua = pgt_get_mmap_base(mm->page_table, nr);
+		if (!ua)
+			return 0;
 	}
 
-	return 0;
+	base = ua;
+
+	for (i = 0; i < nr; i++) {
+		page = request_pages(1, GFP_MMAP);
+		if (!page)
+			return 0;
+
+		add_page_to_list_tail(page, &mmap->alloc_mem);
+		ret = pgt_map_mmap_page(&mm->page_table, page, ua);
+		page->pinfo = fd;
+		page->pdata = off + i * PAGE_SIZE;
+		ua += PAGE_SIZE;
+	}
+
+	if (fd > 0) {
+		ret = fmmap(fd, (char *)ua, len, off);
+		if (ret != len)
+			return 0;
+	}
+
+	return base;
 }
 
 int task_mm_munmap(struct mm_struct *mm,
-		unsigned long start, size_t length,
-		int flags, int sync)
+		unsigned long start,
+		size_t length, int flags, int sync)
 {
+	int i, nr;
+	struct page *page;
+
+	nr = page_nr(length);
+
+	if (sync) {
+		page = pgt_get_task_page(&mm->page_table, start);
+		if (!page)
+			return -EINVAL;
+
+		if (page->pinfo < 0)
+			return -EINVAL;
+
+		/*
+		 * write data to the file if needed
+		 */
+		fmsync(page->pinfo, start, length, page->pdata);
+	}
+
+	for (i = 0; i < nr; i++) {
+		/*
+		 * unmap page
+		 */
+		page = pgt_unmap_mmap_page(&mm->page_table, start);
+		if (!page) {
+			kernel_error("Umap address is not exist\n");
+			start += PAGE_SIZE;
+			continue;
+		}
+
+		/*
+		 * del this page from mmap alloc list
+		 */
+		del_page_from_list(page);
+
+		start += PAGE_SIZE;
+	}
+
 	return 0;
 }
 

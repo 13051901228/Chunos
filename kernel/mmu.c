@@ -75,34 +75,22 @@ int mmu_create_pte_entry(unsigned long pte_entry_addr,
 	return 0;
 }
 
-unsigned long
-mmu_get_pde_entry(unsigned long base, unsigned ua)
+unsigned long inline mmu_pde_entry_to_pa(unsigned long pde)
 {
 	return 0;
 }
 
-size_t inline mmu_get_pgt_size(void)
-{
-	return mmu->tlb_size; 
-}
-
-u32 inline mmu_get_pgt_align(void)
-{
-	return mmu->tlb_align;
-}
-
-unsigned long inline mmu_pde_entry_to_va(unsigned long pde)
-{
-	return 0;
-}
-
-
-unsigned long inline mmu_pte_entry_to_va(unsigned long pte)
+unsigned long inline mmu_pte_entry_to_pa(unsigned long pte)
 {
 	return 0;
 }
 
 void inline mmu_copy_kernel_pde(unsigned long base)
+{
+
+}
+
+void inline mmu_clear_pte_entry(unsigned long pte)
 {
 
 }

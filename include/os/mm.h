@@ -110,4 +110,8 @@ void release_page(struct page *page);
 
 unsigned long page_get_pdata(struct page *page);
 
+void page_set_pdata(struct page *page, unsigned long pdata);
+
+void inline del_page_from_list(struct page *page);
+
 #endif

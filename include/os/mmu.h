@@ -63,11 +63,12 @@ int mmu_create_pde_entry(unsigned long pde_entry_addr,
 int mmu_create_pte_entry(unsigned long pte_entry_addr,
 		unsigned long va, unsigned long user_addr);
 
-unsigned long mmu_get_pde_entry(unsigned long base, unsigned ua);
+unsigned long inline mmu_pde_entry_to_pa(unsigned long pde);
 
-size_t mmu_get_pgt_size(void);
+unsigned long inline mmu_pte_entry_to_pa(unsigned long pte);
 
+void inline mmu_copy_kernel_pde(unsigned long base);
 
-u32 mmu_get_pgt_align(void);
+void inline mmu_clear_pte_entry(unsigned long pte);
 
 #endif

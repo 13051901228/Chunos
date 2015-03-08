@@ -17,13 +17,8 @@ void *os_mmap(void *start, size_t length, int prot,
 	if (!length)
 		return NULL;
 	
-	if (fd < 0)
-		fd = 0xff;
-
-	pages = page_nr(length);
-
-	return task_mm_mmap(&task->mm_struct, start,
-			pages, flags, fd, offset);
+	return (void *)task_mm_mmap(&task->mm_struct, start,
+			length, flags, fd, offset);
 }
 
 static int __os_munmap(unsigned long addr, size_t length,

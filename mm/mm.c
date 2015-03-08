@@ -245,7 +245,7 @@ static int analyse_soc_memory_info(void)
 	return 0;
 }
 
-int do_map_memory(void)
+static int do_map_kernel_memory(void)
 {
 	struct mm_zone *zone;
 	unsigned long flag = 0;
@@ -438,7 +438,7 @@ static void map_memory(void)
 	map_dma_memory();
 	map_res_memory();
 
-	do_map_memory();
+	do_map_kernel_memory();
 }
 
 static unsigned long init_sections_page_table(unsigned long base)
