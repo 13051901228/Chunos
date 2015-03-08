@@ -245,6 +245,33 @@ static int analyse_soc_memory_info(void)
 	return 0;
 }
 
+static int map_boot_section(struct mm_section *section,
+		size_t mapped, unsigned long flag)
+{
+	unsigned long vstart;
+	unsigned long pstart;
+	size_t msize;
+
+	vstart = section->vir_start;
+	pstart = section->phy_start;
+	msize = KERNEL_VIRTUAL_BASE - section->vir_start;
+
+	if (msize > 0)
+		build_kernel_pde_entry(vstart,
+				pstart, msize, flag);
+
+	vstart = KERNEL_VIRTUAL_BASE + mapped;
+	msize = section->maped_size - mapped;
+	pstart = section->phy_start +
+		(vstart - section->vir_start);
+
+	if (msize > 0)
+		build_kernel_pde_entry(vstart,
+				pstart, msize, flag);
+
+	return 0;
+}
+
 static int do_map_kernel_memory(void)
 {
 	struct mm_zone *zone;
@@ -277,18 +304,11 @@ static int do_map_kernel_memory(void)
 		zone = &mm_bank->zone[i];
 		for (j = 0; j < zone->nr_section; j++) {
 			section = &zone->memory_section[j];
-			if (section->vir_start == KERNEL_VIRTUAL_BASE) {
-				unsigned long vstart =
-					section->vir_start + already_map;
-				unsigned long pstart =
-					section->phy_start + already_map;
-				size_t msize =
-					section->maped_size - already_map;
-
+			if ((KERNEL_VIRTUAL_BASE >= section->vir_start) &&
+			    (KERNEL_VIRTUAL_BASE < (section->vir_start + section->size))) {
 				mm_info("Skip already maped memeory \
 						0x%x\n", already_map);
-				build_kernel_pde_entry(vstart,
-						pstart, msize, flag);
+				map_boot_section(section, already_map, flag);
 			} else {
 				build_kernel_pde_entry(section->vir_start,
 						 section->phy_start,
@@ -723,6 +743,8 @@ static inline struct mm_section *page_get_section(struct page *page)
 
 struct page *va_to_page(unsigned long va)
 {
+	/* only can used to translate kernel memory */
+
 	struct mm_section *section = va_get_section(va);
 
 	return section ? section_va_to_page(section, va) : 0;
