@@ -58,31 +58,32 @@ int build_kernel_pde_entry(unsigned long vstart,
 		size -= PDE_ALIGN_SIZE;
 	}
 
-	arch_flush_mmu_tlb();
+	mmu->mmu_ops->invalid_pgt();
 
 	return 0;
 }
 
-int mmu_create_pde_entry(unsigned long pde_entry_addr,
-		unsigned long pte_base, unsigned long user_addr)
+void inline mmu_create_pde_entry(unsigned long pde_entry_addr,
+				unsigned long pte_base)
 {
-	return 0;
+	mmu->mmu_ops->build_pte_pde_entry(pde_entry_addr,
+			pte_base, 0);
 }
 
-int mmu_create_pte_entry(unsigned long pte_entry_addr,
-		unsigned long pa, unsigned long user_addr)
+void inline mmu_create_pte_entry(unsigned long pte_entry_addr,
+			unsigned long pa)
 {
-	return 0;
+	mmu->mmu_ops->build_pte_entry(pte_entry_addr, pa, 0);
 }
 
 unsigned long inline mmu_pde_entry_to_pa(unsigned long pde)
 {
-	return 0;
+	return mmu->mmu_ops->pte_pde_to_pa(pde);
 }
 
 unsigned long inline mmu_pte_entry_to_pa(unsigned long pte)
 {
-	return 0;
+	return mmu->mmu_ops->pte_to_pa(pte);
 }
 
 void inline mmu_copy_kernel_pde(unsigned long base)
@@ -92,8 +93,14 @@ void inline mmu_copy_kernel_pde(unsigned long base)
 
 void inline mmu_clear_pte_entry(unsigned long pte)
 {
-
+	return mmu->mmu_ops->clear_pte_entry(pte);
 }
+
+void inline mmu_clear_pde_entry(unsigned long pde)
+{
+	return mmu->mmu_ops->clear_pte_pde_entry(pde);
+}
+
 
 int mmu_init(void)
 {

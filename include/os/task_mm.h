@@ -76,4 +76,12 @@ int task_mm_copy_sigreturn(struct mm_struct *mm,
 
 int init_mm_struct(struct task_struct *task);
 
+unsigned long task_mm_mmap(struct mm_struct *mm,
+		unsigned long start, size_t len,
+		int flags, int fd, offset_t off);
+
+int task_mm_munmap(struct mm_struct *mm,
+		unsigned long start,
+		size_t length, int flags, int sync);
+
 #endif

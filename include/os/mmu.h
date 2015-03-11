@@ -23,20 +23,27 @@
 #define PDE_MIN_ALIGN(addr)		ARCH_PDE_MIN_ALIGN(addr)
 
 struct mmu_ops {
-	int (*build_pde_entry)(unsigned long pde_base,
+	void (*build_pde_entry)(unsigned long pde_base,
 			unsigned long pa, int flag);
 
-	int (*build_pte_entry)(unsigned long *addr,
+	void (*build_pte_pde_entry)(unsigned long pde_base,
 			unsigned long pa, int flag);
 
-	int (*clear_pde_entry)(unsigned long *base, unsigned long va);
-	int (*clear_pte_entry)(unsigned long *base, unsigned long va);
+	void (*build_pte_entry)(unsigned long addr,
+			unsigned long pa, int flag);
+
+	void (*clear_pte_pde_entry)(unsigned long base);
+
+	void (*clear_pte_entry)(unsigned long base);
+
+	unsigned long (*pte_pde_to_pa)(unsigned long pde);
+
+	unsigned long (*pte_to_pa)(unsigned long pte);
+
 	void (*invalid_pgt)(void);
 };
 
 struct mmu {
-	size_t tlb_size;
-	u32 tlb_align;
 	unsigned long kernel_tlb_base;
 	struct mmu_ops *mmu_ops;
 };
@@ -55,13 +62,11 @@ int build_kernel_pde_entry(unsigned long vstart,
 			  unsigned long pstart,
 			  size_t size, u32 flag);
 
-void clear_tlb_entry(unsigned long va, size_t size);
+void mmu_create_pde_entry(unsigned long pde_entry_addr,
+			unsigned long pte_base);
 
-int mmu_create_pde_entry(unsigned long pde_entry_addr,
-		unsigned long pte_base, unsigned long user_addr);
-
-int mmu_create_pte_entry(unsigned long pte_entry_addr,
-		unsigned long va, unsigned long user_addr);
+void mmu_create_pte_entry(unsigned long pte_entry_addr,
+			unsigned long pa);
 
 unsigned long inline mmu_pde_entry_to_pa(unsigned long pde);
 
@@ -70,5 +75,7 @@ unsigned long inline mmu_pte_entry_to_pa(unsigned long pte);
 void inline mmu_copy_kernel_pde(unsigned long base);
 
 void inline mmu_clear_pte_entry(unsigned long pte);
+
+void inline mmu_clear_pde_entry(unsigned long pde);
 
 #endif

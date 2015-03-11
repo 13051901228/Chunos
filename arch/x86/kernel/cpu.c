@@ -12,7 +12,7 @@
 
 extern void x86_idt_init(void);
 
-void arch_disable_irqs(void)
+void inline arch_disable_irqs(void)
 {
 	asm ("cli\n\t");
 }
@@ -84,7 +84,6 @@ int arch_irq_init(void)
 
 int arch_init(void)
 {
-	/* setup idt and other */
 	return 0;
 }
 
