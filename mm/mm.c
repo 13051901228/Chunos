@@ -252,14 +252,6 @@ static int map_boot_section(struct mm_section *section,
 	unsigned long pstart;
 	size_t msize;
 
-	vstart = section->vir_start;
-	pstart = section->phy_start;
-	msize = KERNEL_VIRTUAL_BASE - section->vir_start;
-
-	if (msize > 0)
-		build_kernel_pde_entry(vstart,
-				pstart, msize, flag);
-
 	vstart = KERNEL_VIRTUAL_BASE + mapped;
 	msize = section->maped_size - mapped;
 	pstart = section->phy_start +
