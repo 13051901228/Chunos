@@ -19,8 +19,8 @@ struct cmdline {
 
 typedef int (*init_call)(void);
 
-#define __init_data __attribute__((section(".init_data")))
-#define __init_text __attribute__((section(".init_text")))
+#define __init_data __attribute__((section(".__init_data_section")))
+#define __init_text __attribute__((section(".__init_text")))
 
 #define __init_0	__attribute__((section(".__init_func_0")))
 #define __init_1	__attribute__((section(".__init_func_1")))

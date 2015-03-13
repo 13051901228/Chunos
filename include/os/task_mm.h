@@ -84,4 +84,14 @@ int task_mm_munmap(struct mm_struct *mm,
 		unsigned long start,
 		size_t length, int flags, int sync);
 
+struct page *
+pgt_unmap_mmap_page(struct task_page_table *table,
+			unsigned long base);
+
+int pgt_map_mmap_page(struct task_page_table *table,
+		struct page *page, unsigned long user_addr);
+
+int pgt_check_mmap_addr(struct task_page_table *table,
+		unsigned long start, int nr);
+
 #endif

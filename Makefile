@@ -10,10 +10,10 @@ BOARD		:= sofia-svb
 
 INCLUDE_DIR 	:= include/os/*.h include/asm/*.h include/config/*.h include/sys/*.h
 
-CCFLAG 		:=-Wall -nostdlib -fno-builtin -g -I$(PWD)/include
+CCFLAG 		:=-Wall --static -nostdlib -fno-builtin -g -fno-pic -I$(PWD)/include
 LDS 		:= arch/$(ARCH)/kernel/lds/kernel.lds
 LDFLAG 		:= -T$(LDS)
-LDPATH 		:= -L/opt/i686-linux-android-4.6/lib/gcc/i686-linux-android/4.6.x-google -lgcc
+LDPATH 		:= -L/opt/i686-linux-android-4.6/lib/gcc/i686-linux-android/4.6.x-google
 
 OUT 		:= out
 OUT_KERNEL 	= $(OUT)/kernel

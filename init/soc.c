@@ -26,7 +26,6 @@ static int __init_text find_system_soc(struct soc *soc)
 {
 	int nr, i;
 	unsigned long start;
-	int ret;
 	extern unsigned long soc_platform_start, soc_platform_end;
 	extern unsigned long soc_board_start, soc_board_end;
 	struct soc_platform *platform_tmp;
@@ -34,25 +33,29 @@ static int __init_text find_system_soc(struct soc *soc)
 
 	/* find the member board and platform for system */
 	start = soc_platform_start;
-	nr = (soc_platform_start - soc_platform_end) / sizeof(struct soc_platform *);
+	nr = (soc_platform_end - soc_platform_start) /
+			sizeof(struct soc_platform *);
 	for (i = 0; i < nr; i ++) {
-		platform_tmp = *((struct soc_platform **)start);
-		if (platform_tmp[i].platform_id == soc_desc.platform_id) {
-			memcpy(&soc->platform, platform_tmp, sizeof(struct soc_platform));
+		platform_tmp = (struct soc_platform *)(*(unsigned long *)start);
+		if (platform_tmp->platform_id == soc_desc.platform_id) {
+			memcpy(&soc->platform, (char *)platform_tmp,
+					sizeof(struct soc_platform));
 			break;
 		}
 		start += sizeof(unsigned long);
 	}
 
 	if (i == nr)
-		ret = -EFAULT;
+		return -EFAULT;
 
 	start = soc_board_start;
-	nr = (soc_board_end - soc_board_start) /sizeof(struct soc_board *);
+	nr = (soc_board_end - soc_board_start) /
+			sizeof(struct soc_board *);
 	for (i = 0; i < nr; i ++) {
-		board_tmp = *((struct soc_board **)start);
+		board_tmp = (struct soc_board *)(*(unsigned long *)start);
 		if (board_tmp[i].board_id == soc_desc.board_id) {
-			memcpy(&soc->board, board_tmp, sizeof(struct soc_board));
+			memcpy(&soc->board, (char *)board_tmp,
+				sizeof(struct soc_board));
 			break;
 		}
 		start += sizeof(unsigned long);
@@ -95,9 +98,11 @@ int __init_text timer_tick_init(void)
 	else
 		kernel_warning("System timer may not init\n");
 	
-	ret = register_irq(SYSTEM_TIMER_IRQ_NUMBER, os_tick_handler, NULL );
+	ret = register_irq(SYSTEM_TIMER_IRQ_NUMBER,
+			os_tick_handler, NULL );
 	if (ret)
-		kernel_error("Can not register irq %d for system timer\n");
+		kernel_error("Can not register irq %d \
+				for system timer\n");
 	
 	return ret;
 }

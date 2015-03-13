@@ -90,6 +90,7 @@ struct mmu_ops x86_mmu_ops = {
 	.clear_pte_pde_entry	= x86_clear_pte_pde_entry,
 	.pte_to_pa		= x86_pte_to_pa,
 	.pte_pde_to_pa		= x86_pte_pde_to_pa,
+	.invalid_pgt		= x86_invalid_pgt,
 };
 
 struct mmu x86_mmu = {

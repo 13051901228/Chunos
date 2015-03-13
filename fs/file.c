@@ -362,7 +362,8 @@ int sys_chdir(const char *path)
 		fdes->cdir = NULL;
 	}
 
-	fdes->cdir = get_file_fnode(path, O_RDWR | O_DIRECTORY);
+	fdes->cdir = get_file_fnode((char *)path,
+			O_RDWR | O_DIRECTORY);
 	if (!fdes->cdir)
 		return -ENOENT;
 

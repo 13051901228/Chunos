@@ -547,7 +547,7 @@ int task_mm_munmap(struct mm_struct *mm,
 		/*
 		 * write data to the file if needed
 		 */
-		fmsync(page->pinfo, start, length, page->pdata);
+		fmsync(page->pinfo, (char *)start, length, page->pdata);
 	}
 
 	for (i = 0; i < nr; i++) {

@@ -25,6 +25,7 @@
 _start:
 	cli
 	cld
+	wbinvd
 	mov $0x1000a000, %eax		# temp code, bootloader need to tell the physical start address of kernel
 	jmp reset
 
@@ -113,8 +114,8 @@ clear_bss:
 	mov $0, %edx
 1:
 	cmp %eax, %ecx
-	jbe clean_pde_table
-	mov %edx, (%eax)
+	je clean_pde_table
+	movl %edx, (%eax)
 	add $4, %eax
 	jmp 1b
 
@@ -132,7 +133,7 @@ clean_pde_table:
 	add $4, %eax
 	jmp 2b
 
-set_boot_pde_1:					# 0xa0000000 - 0x10000000
+set_boot_pde_1:					# 0xc0000000 - 0x10000000
 	mov $KERNEL_PDE_BASE, %eax
 	lea kernel_phy_start, %ebx
 	va_to_pa %eax				# eax : pde table base address
@@ -146,7 +147,7 @@ set_boot_pde_1:					# 0xa0000000 - 0x10000000
 	lea code_end, %edx
 	va_to_pa %edx
 	mov (%edx), %edx
-	sub $(0xa0000000), %edx			# size to map
+	sub $KERNEL_VIRTUAL_BASE, %edx			# size to map
 	add $(0x3fffff), %edx
 	and $(~0x3fffff), %edx
 	shr $(20), %edx

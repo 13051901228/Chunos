@@ -200,18 +200,13 @@ static void alloc_dma_section(void)
 	zone = &mm_bank->zone[MM_ZONE_KERNEL];
 	size = zone->page_num >> 4;
 
+	if ((size << PAGE_SHIFT) > KERNEL_DMA_SIZE)
+		size = KERNEL_DMA_SIZE >> PAGE_SHIFT;
+
 	/*
 	 * choose the section which has the max size
 	 */
-	pr = &zone->memory_section[zone->nr_section];
-
-	/*
-	 * fix me, we must ensure that the section with
-	 * max size must have enough size to split
-	 * memory for DMA.
-	 */
-	pr->nr_page -= size;
-	pr->nr_free_pages -= size;
+	pr = &zone->memory_section[zone->nr_section - 1];
 
 	/*
 	 * get a new mm_region for dma
@@ -221,6 +216,16 @@ static void alloc_dma_section(void)
 	rtmp.attr = DMA_MEM;
 	rtmp.size = size << PAGE_SHIFT;
 
+	/*
+	 * fix me, we must ensure that the section with
+	 * max size must have enough size to split
+	 * memory for DMA.
+	 */
+	pr->nr_page -= size;
+	pr->nr_free_pages -= size;
+	pr->size -= size << PAGE_SHIFT;
+
+	
 	zone->page_num -= size;
 	zone->nr_free_pages = zone->page_num;
 
@@ -296,6 +301,8 @@ static int do_map_kernel_memory(void)
 		zone = &mm_bank->zone[i];
 		for (j = 0; j < zone->nr_section; j++) {
 			section = &zone->memory_section[j];
+			if (!section->maped_size)
+				continue;
 			if ((KERNEL_VIRTUAL_BASE >= section->vir_start) &&
 			    (KERNEL_VIRTUAL_BASE < (section->vir_start + section->size))) {
 				mm_info("Skip already maped memeory \
@@ -395,7 +402,6 @@ static void map_kernel_memory(void)
 	for (i = 0; i < zone->nr_section; i++) {
 		section = &zone->memory_section[i];
 		if (section->phy_start == info->kernel_physical_start) {
-			section->size = section->nr_page << PAGE_SHIFT;
 			if (section->size > KERNEL_VIRTUAL_SIZE)
 				size = KERNEL_VIRTUAL_SIZE;
 			else 
@@ -546,7 +552,7 @@ static int init_page_table(void)
 	base_addr = align(info->code_end, sizeof(unsigned long));
 	base_addr = init_sections_page_table(base_addr);
 
-	base_addr = align(base_addr, sizeof(u32));
+	base_addr = align(base_addr, sizeof(unsigned long));
 	base_addr = init_sections_bitmap(base_addr);
 
 	/*
@@ -571,7 +577,7 @@ static int init_page_table(void)
 	base_addr = align(base_addr, PAGE_SIZE);
 	size = base_addr - KERNEL_VIRTUAL_BASE;
 	size = size >> PAGE_SHIFT;
-	zone->nr_free_pages = size;
+	zone->nr_free_pages -= size;
 
 	/*
 	 * update the boot section information
@@ -610,11 +616,13 @@ static void init_user_zone(void)
 	int i, j = 0;
 	struct mm_zone *zone, *uzone;
 	struct mm_section *section, *usection;
+	int nr;
 
 	zone = &mm_bank->zone[MM_ZONE_KERNEL];
 	uzone = &mm_bank->zone[MM_ZONE_USER];
+	nr = zone->nr_section;
 
-	for (i = 0; i < zone->nr_section; i++) {
+	for (i = 0; i < nr; i++) {
 		section = &zone->memory_section[i];
 		if (section->maped_size <
 			(section->nr_page << PAGE_SHIFT)) {
@@ -676,8 +684,8 @@ int mm_init(void)
 	init_memory_bank();
 	analyse_soc_memory_info();
 	map_memory();
-	init_user_zone();
 	init_page_table();
+	init_user_zone();
 	update_section_table();
 
 	return 0;

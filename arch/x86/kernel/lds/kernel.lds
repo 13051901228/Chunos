@@ -1,7 +1,7 @@
 ENTRY(_start)
 SECTIONS
 {
-	. = 0xa000a000;
+	. = 0xc000a000;
 
 	__code_start = .;
 	.text : 
@@ -62,19 +62,21 @@ SECTIONS
 	}
 	__init_func_end = .;
 
+	. = ALIGN(4);
+
+	__init_data_start = .;
+	.__init_data_section : {
+		*(.__init_data_section)
+	}
+	__init_data_end = .;
+
+	. = ALIGN(4);
+
 	__init_text_start = .;
 	.__init_text : {
 		*(__init_text)
 	}
 	__init_text_end = .;
-
-	. = ALIGN(4);
-
-	__init_data_start = .;
-	.__init_data : {
-		*(__init_data)
-	}
-	__init_data_end = .;
 
 	. = ALIGN(4);
 
