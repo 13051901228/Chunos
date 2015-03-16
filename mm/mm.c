@@ -770,13 +770,14 @@ struct page *pa_to_page(unsigned long pa)
 static void init_pages(struct mm_section *section,
 		int index, int count, unsigned long flag)
 {
-	int i, page_size;
+	int i, page_size, nr = count;
 	unsigned long pa;
 	unsigned long va;
+	unsigned long flag_temp = flag;
 	struct page *pg;
 
-	va = section->vir_start + (index >> PAGE_SHIFT);
-	pa = section->phy_start + (index >> PAGE_SHIFT);
+	va = section->vir_start + (index << PAGE_SHIFT);
+	pa = section->phy_start + (index << PAGE_SHIFT);
 	pg = &section->page_table[index];
 
 	page_size = PAGE_SIZE;
@@ -785,28 +786,32 @@ static void init_pages(struct mm_section *section,
 		page_size = 0;
 	}
 
-	pg->count = count;
-	pg->flag |= __GFP_PAGE_HEADER;
+	flag_temp |= __GFP_PAGE_HEADER;
 
-	for (i = index; i < index + count; i++) {
+	for (i = 0; i < count; i++) {
 		/*
 		 * section_table_id is appended to the
 		 * physical address, is the page is used
 		 * to the user space the va is not used.
 		 */
+		memset((char *)pg, 0, sizeof(struct page));
 		pg->phy_address = pa |
 			section->section_table_id;
 		pg->map_address = va + (i * page_size);
 
 		init_list(&pg->plist);
+		pg->count = nr;
+		pg->flag |= flag_temp;
 
 		/*
 		 * page table must 4K aligin, so when this page
 		 * is used as a page table for process, we need
 		 * initilize its free_base scope.
 		 */
-		pg->flag = flag;
 		pa += PAGE_SIZE;
+		pg++;
+		nr = 0;
+		flag_temp = flag;
 	}
 }
 
@@ -869,7 +874,7 @@ __get_free_pages_from_zone(struct mm_zone *zone,
 {
 	struct mm_section *section = NULL;
 	unsigned long ret = 0;
-	int id;
+	int id = 0;
 
 	mutex_lock(&zone->zone_mutex);
 
@@ -877,11 +882,14 @@ __get_free_pages_from_zone(struct mm_zone *zone,
 		goto out;
 
 	/* find a section which have count pages */
-	for (id = 0; id < zone->nr_section; id++) {
-		if (zone->memory_section[id].nr_free_pages < count)
+	for (id = 0; id < ZONE_MAX_SECTION; id++)  {
+		section = &zone->memory_section[id];
+		if (!section->size)
 			continue;
 
-		section = &zone->memory_section[id];
+		if (section->nr_free_pages < count)
+			continue;
+
 		ret = get_free_pages_from_section(section,
 				count, flag, vp);
 		if (ret)
@@ -988,10 +996,12 @@ static void __free_pages(struct mm_section *section, struct page *page)
 
 	update_memory_bitmap(section->bitmap, index, count, 0);
 
+#if 0
 	for (i = 0; i < count; i++) {
 		memset((char *)page, 0, sizeof(struct page));
 		page++;
 	}
+#endif
 
 	update_bm_current(section);
 }

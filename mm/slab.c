@@ -125,7 +125,7 @@ static int alloc_new_slab_cache(size_t size)
 	 */
 	mutex_lock(&pslab->slab_mutex);
 	page = request_pages(nr, GFP_SLAB);
-	if (!pslab->slab_free)
+	if (!page)
 		return -ENOMEM;
 
 	add_page_to_list_tail(page, &pslab->plist);
@@ -166,7 +166,7 @@ static void *get_slab_from_pool(int size, int flag)
 	mutex_lock(&pslab->slab_mutex);
 
 	slab_pool = &pslab->pool[id];
-	if (slab_pool->head) {
+	if (!slab_pool->head) {
 		mutex_unlock(&pslab->slab_mutex);
 		return NULL;
 	}
@@ -186,8 +186,10 @@ static void *get_slab_from_slab_free(int size, int flag)
 	mutex_lock(&pslab->slab_mutex);
 
 	header = (struct slab_header *)pslab->slab_free;
-	if (pslab->free_size < SLAB_SIZE(size))
+	if (pslab->free_size < SLAB_SIZE(size)) {
+		mutex_unlock(&pslab->slab_mutex);
 		return NULL;
+	}
 
 	memset((void *)header, 0, sizeof(struct slab_header));
 	header->size = size;
@@ -203,6 +205,8 @@ static void *get_slab_from_slab_free(int size, int flag)
 		pslab->slab_free = 0;
 		pslab->free_size = 0;
 	}
+
+	mutex_unlock(&pslab->slab_mutex);
 
 	return header_to_base(header);
 }
@@ -266,8 +270,10 @@ static void *get_big_slab(int size, int flag)
 		slab_pool = &pslab->pool[id];
 		if ((!slab_pool->head)) {
 			id ++;
-			if (id == pslab->pool_nr)
+			if (id == pslab->pool_nr) {
+				mutex_unlock(&pslab->slab_mutex);
 				return NULL;
+			}
 		} else {
 			break;
 		}
@@ -286,7 +292,7 @@ typedef void *(*slab_alloc_func)(int size, int flag);
 
 static void *__kmalloc(int size, int flag)
 {
-	int i;
+	int i = 0;
 	void *ret = NULL;
 	slab_alloc_func func;
 

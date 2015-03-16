@@ -13,8 +13,12 @@ int mutex_lock_timeout(struct mutex *m, int ms)
 	int timeout = 0;
 
 	if (in_interrupt) {
-		kernel_info("waring: maybe sleep in interrupt\n");
+		kernel_info("waring: maybe sleep \
+				in interrupt\n");
 	}
+
+	if (!task)
+		return 0;
 
 	/*
 	 * frist we check wether this mutex has
@@ -40,9 +44,7 @@ int mutex_lock_timeout(struct mutex *m, int ms)
 		}
 		else {
 			m->count = 1;
-			if (task) {
-				list_add_tail(&task->mutex_get, &m->task);
-			}
+			list_add_tail(&task->mutex_get, &m->task);
 			exit_critical(&flags);
 			break;
 		}

@@ -133,7 +133,7 @@ int irq_init(void)
 		return -ENOMEM;
 	}
 
-	memset(irq_table_base, 0, nr<<PAGE_SHIFT);
+	memset(irq_table_base, 0, nr << PAGE_SHIFT);
 
 	if (platform->irq_chip) {
 		irq_chip = platform->irq_chip;

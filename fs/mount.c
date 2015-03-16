@@ -218,6 +218,6 @@ void __init_text mount_init(void)
 	memset((void *)&mount_tree, 0, sizeof(struct mount_tree));
 	init_mutex(&mount_tree.mount_mutex);
 
-	mount_root("/dev/disk0p0", "/", "lmfs", 0);
-	sys_mount("devfs", "/dev", "devfs", MS_NODEV, NULL);
+	if (!mount_root("/dev/disk0p0", "/", "lmfs", 0))
+		sys_mount("devfs", "/dev", "devfs", MS_NODEV, NULL);
 }
