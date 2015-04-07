@@ -49,7 +49,7 @@ void inline arch_flush_mmu_tlb(void)
 
 void arch_enable_irqs(void)
 {
-
+	asm ("sti\n\t");
 }
 
 void arch_enter_critical(unsigned long *val)
@@ -84,6 +84,9 @@ int arch_irq_init(void)
 
 int arch_init(void)
 {
+	x86_idt_init();
+	tss_init();
+
 	return 0;
 }
 
@@ -114,5 +117,5 @@ int uart_puts(char *str)
 
 int arch_early_init(void)
 {
-	x86_idt_init();
+	return 0;
 }

@@ -1,5 +1,5 @@
-ARCH 		:= arm
-CROSS_COMPILE 	:= arm-linux-
+ARCH 		:= x86
+CROSS_COMPILE 	:= i686-linux-android-
 CC 		:= $(CROSS_COMPILE)gcc
 LD 		:= $(CROSS_COMPILE)ld
 OBJCOPY		:= $(CROSS_COMPILE)objcopy
@@ -7,7 +7,7 @@ OBJDUMP 	:= $(CROSS_COMPILE)objdump
 AR	 	:= $(CROSS_COMPILE)ar
 STRIP	 	:= $(CROSS_COMPILE)strip
 
-LIBC_DIR	:= $(shell pwd)/../diet-libc
+LIBC_DIR	:= $(shell pwd)/../diet-libc-$(ARCH)
 LIBS_DIR	:= $(LIBC_DIR)/lib
 INCLUDE_DIR 	:= $(LIBC_DIR)/include
 

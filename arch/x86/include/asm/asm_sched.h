@@ -9,22 +9,22 @@
 #define __ASM_SCHED__H
 
 typedef struct _pt_regs {
-	unsigned long eax;
-	unsigned long ebx;
-	unsigned long ecx;
-	unsigned long edx;
-	unsigned long esi;
-	unsigned long edi;
-	unsigned long esp;
-	unsigned long ebp;
-	unsigned long es;
-	unsigned long cs;
-	unsigned long ss;
-	unsigned long ds;
-	unsigned long fs;
-	unsigned long gx;
 	unsigned long eip;
 	unsigned long eflags;
+	unsigned long eax;
+	unsigned long ecx;
+	unsigned long edx;
+	unsigned long ebx;
+	unsigned long esp;
+	unsigned long ebp;
+	unsigned long esi;
+	unsigned long edi;
+	unsigned short es, res_es;
+	unsigned short cs, res_cs;
+	unsigned short ss, res_ss;
+	unsigned short ds, res_ds;
+	unsigned short fs, res_fs;
+	unsigned short gs, res_gs;
 } pt_regs;
 
 #endif

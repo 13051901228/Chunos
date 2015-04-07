@@ -44,12 +44,16 @@ struct trap_gate {
 struct idt_entry {
 	union {
 		struct task_gate task_gate;
-		struct interrupt_gate intrrupt_gate;
+		struct interrupt_gate interrupt_gate;
 		struct trap_gate trap_gate;
 		u64 data;
 	};
 };
 
+int install_interrupt_gate(int index, unsigned long func);
+
+int install_trap_gate(int index, unsigned long func);
+
+int install_task_gate(int index, unsigned long func);
+
 #endif
-
-
