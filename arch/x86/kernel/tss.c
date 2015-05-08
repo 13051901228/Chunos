@@ -8,6 +8,7 @@
 #include <os/init.h>
 #include "include/x86_config.h"
 #include "include/gdt.h"
+#include <os/mm.h>
 
 struct x86_tss {
 	unsigned short p_task_link, res_l;
@@ -42,7 +43,13 @@ static struct x86_tss *x86_tss_base = (struct x86_tss *)SYSTEM_TSS_BASE;
 
 void __init_text tss_init(void)
 {
-	setup_kernel_tss_des((void *)x86_tss_base, 1);
+	unsigned long tss_base =
+		va_to_pa((unsigned long)x86_tss_base);
+
+	if (!tss_base)
+		return;
+
+	setup_kernel_tss_des((void *)tss_base, 1);
 	__asm("movw $0x68, %ax");
 	__asm("ltr %ax");
 }

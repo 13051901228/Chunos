@@ -37,6 +37,12 @@ gdt_table_ptr:	.word 512
 
 	.align 4
 
+.global idt_table_ptr
+idt_table_ptr:	.word 512
+		.long SYSTEM_IDT_BASE
+
+	.align 4
+
 .global pv_offset
 pv_offset:		.long 0
 
@@ -253,7 +259,17 @@ set_kernel_stack:
 set_pde_base:
 	mov $KERNEL_PDE_BASE, %eax
 	va_to_pa %eax				# set paging base address
-	mov %eax, %cr3				
+	mov %eax, %cr3
+
+load_idt_table:
+	lea idt_table_ptr, %eax
+	va_to_pa %eax
+	mov %eax, %ecx
+	add $2, %ecx
+	mov (%ecx), %ebx
+	va_to_pa %ebx
+	mov %ebx, (%ecx)
+	lidt (%eax)				# setup idt for kernel no entry
 
 load_new_gdt:
 	lea gdt_table_ptr, %eax

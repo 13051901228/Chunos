@@ -86,6 +86,8 @@ struct page *pa_to_page(unsigned long pa);
 
 unsigned long page_to_pa(struct page *page);
 
+unsigned long va_to_pa(unsigned long va);
+
 struct page *get_free_pages_align(int nr, u32 aligin, int flag);
 
 struct page *get_free_page_match(unsigned long match, int flag);

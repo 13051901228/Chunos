@@ -23,7 +23,7 @@ struct gdt_des {
 	u64 db : 1;
 	u64 g : 1;
 	u64 base_h2 : 8;
-};
+} __attribute__((packed));
 
 struct gdt_entry {
 	union {
@@ -48,11 +48,11 @@ void setup_tss_des(int index, unsigned long base, int page)
 	des->type = 9;
 	des->s = 0;
 	des->dpl = 0;
-	des->p = 0;
+	des->p = 1;
 	des->s_limit_h = (page >> 16) & 0xf;
 	des->avl = 1;
 	des->l = 0;
-	des->db = 0;
+	des->db = 1;
 	des->g = 1;
 	des->base_h2 = (base >> 24) & 0xff;
 }

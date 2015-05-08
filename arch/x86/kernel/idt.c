@@ -36,7 +36,7 @@ setup_interrupt_gate(struct idt_entry *entry, unsigned long func)
 	gate->attr = 0xe;
 	gate->dpl = 0x0;
 	gate->p = 1;
-	gate->offset_h = (func & 0xffff000) >> 16;
+	gate->offset_h = (func & 0xffff0000) >> 16;
 }
 
 static inline void
@@ -49,7 +49,7 @@ setup_trap_gate(struct idt_entry *entry, unsigned long func)
 	gate->attr = 0xf;
 	gate->dpl = 0x0;
 	gate->p = 1;
-	gate->offset_h = (func & 0xffff000) >> 16;
+	gate->offset_h = (func & 0xffff0000) >> 16;
 }
 
 static inline void

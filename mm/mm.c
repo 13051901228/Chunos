@@ -529,6 +529,7 @@ static int update_boot_section_info(struct mm_section *section,
 		page->flag = __GFP_KERNEL;
 
 		tmp += PAGE_SIZE;
+		page++;
 	}
 
 	section->bm_current = size;
@@ -765,6 +766,11 @@ struct page *pa_to_page(unsigned long pa)
 	struct mm_section *section = pa_get_section(pa);
 
 	return section ? section_pa_to_page(section, pa) : 0;
+}
+
+unsigned long va_to_pa(unsigned long va)
+{
+	return page_to_pa(va_to_page(va));
 }
 
 static void init_pages(struct mm_section *section,
