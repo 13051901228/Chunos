@@ -11,6 +11,9 @@
 static void *irq_table_base = NULL;
 static struct irq_chip *irq_chip;
 
+extern void arch_enter_critical(unsigned long *val);
+extern void arch_exit_critical(unsigned long *val);
+
 int in_interrupt = 0;
 
 void enable_irqs(void)

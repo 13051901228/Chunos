@@ -287,9 +287,9 @@ void arch_init_pt_regs(pt_regs *regs, void *fn, void *arg)
 		 * calculate how many arguments passed to this
 		 * program.
 		 */
-		regs->r0 = 0;
-		regs->r1 = PROCESS_USER_BASE;
-		regs->sp = PROCESS_USER_STACK_BASE - (int)arg;
+		regs->r0 = (int)arg;
+		regs->r1 = PROCESS_USER_META_BASE;
+		regs->sp = PROCESS_USER_STACK_BASE;
 		regs->pc = PROCESS_USER_EXEC_BASE;
 		regs->cpsr = USER_MODE;
 	}

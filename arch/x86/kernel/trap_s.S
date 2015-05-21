@@ -5,7 +5,7 @@
 
 .extern current
 .extern next_run
-.extern update_tss
+.extern switch_task
 
 .macro ISR_COMMON_HANDLER name
 	mov 32(%esp), %ebx		/* ebx is the error code */
@@ -39,24 +39,24 @@ isr_from_user_\name:
 	push $USER_GS
 
 do_isr_handler_\name:
-	lea current, %edx
-	mov (%edx), %edx
-	mov %esp, (%edx)		/* store the current statck to the task_struct */
-
-	mov $SYSTEM_ISR_STACK_BASE, %esp
 	call %ecx
 
-	lea current, %eax
-	lea next_run, %ebx
+	lea current, %ecx
+	lea next_run, %edx
+	mov (%ecx), %eax
+	mov (%edx), %ebx
+	mov %esp, (%eax)	/* store the stack base to current process */
 
-	mov (%eax), %ecx
-	mov (%ebx), %edx
+	call switch_task
 
-	mov %edx, (%eax)	/* current = next_run */
-	mov (%edx), %eax		/* eax is the task_struct which will run later */
-	call update_tss		/* set up tss */
+	lea current, %ecx
+	lea next_run, %edx
+	mov (%ecx), %eax
+	mov (%edx), %ebx
 
-	mov (%edx), %esp	/* switch stack */
+	mov %ebx, (%ecx)	/* current = next_run */
+	mov (%ebx), %esp	/* stack base of next run task */
+
 	pop %gs
 	pop %fs
 	pop %ds

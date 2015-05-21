@@ -264,8 +264,7 @@ static void get_task_run_time(struct task_struct *task)
 
 int init_sched_struct(struct task_struct *task)
 {
-	task->prio = 0;
-	task->pre_prio = 0;
+	set_task_prio
 
 	/*  this value will be set to a default value later */
 	get_task_run_time(task);

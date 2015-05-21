@@ -44,7 +44,11 @@ static int init_task_struct(struct task_struct *task, unsigned long flag)
 
 	task->uid = current->uid;
 	task->stack_base = 0;
-	strncpy(task->name, current->name, strlen(current->name));
+
+	if (!task->name[0]) {
+		strncpy(task->name, current->name,
+				strlen(current->name));
+	}
 	task->flag = flag;
 
 	/* add task to the child list of his parent. */
@@ -171,7 +175,7 @@ static struct task_struct *allocate_task(char *name)
 	if (!task)
 		return NULL;
 
-	memset((char *)task, 0, PAGE_SIZE * pages);
+	memset((char *)task, 0, sizeof(struct task_struct));
 
 	/* set the name of the task usually the bin path */
 	if (name) {
@@ -272,6 +276,7 @@ int kthread_run(char *name, int (*fn)(void *arg), void *arg)
 	pt_regs regs;
 
 	flag |= PROCESS_TYPE_KERNEL;	
+	memset(&regs, 0, sizeof(pt_regs));
 	init_pt_regs(&regs, (void *)fn, arg);
 
 	return do_fork(name, &regs, flag);
@@ -368,6 +373,7 @@ int do_exec(char __user *name,
 	struct task_struct *new;
 	int err = 0;
 	unsigned long flag = current->flag;
+	int arg_num;
 
 	if (current->flag & PROCESS_TYPE_KERNEL) {
 		/*
@@ -395,7 +401,7 @@ int do_exec(char __user *name,
 	 * must before load_elf_image, since the memory
 	 * will be overwrited by it
 	 */
-	task_setup_argenv(new, name, argv, envp);
+	arg_num = task_setup_argenv(new, name, argv, envp);
 
 	copy_sigreturn_code(new);
 
@@ -414,7 +420,7 @@ int do_exec(char __user *name,
 	flush_cache();
 
 	/* modify the regs for new process. */
-	init_pt_regs(regs, NULL, NULL);
+	init_pt_regs(regs, NULL, (void *)arg_num);
 
 	/*
 	 * fix me - whether need to do this if exec

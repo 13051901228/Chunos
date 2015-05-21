@@ -90,10 +90,11 @@ int main(void)
 
 	/* now we can enable irq */
 	enable_irqs();
+	__asm("int $20");
 
 	kthread_run("system_killer", system_killer, NULL);
 
-	init_task();
+	//init_task();
 
 	for (;;) {
 		cpu_idle();
