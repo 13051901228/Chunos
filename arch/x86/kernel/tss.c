@@ -41,6 +41,11 @@ struct x86_tss {
 
 static struct x86_tss *x86_tss_base = (struct x86_tss *)SYSTEM_TSS_BASE;
 
+void update_tss(struct task_struct *task)
+{
+
+}
+
 void __init_text tss_init(void)
 {
 	unsigned long tss_base =

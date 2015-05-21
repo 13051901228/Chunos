@@ -1,34 +1,83 @@
 	.text
 
 #include "include/gdt.h"
+#include "include/x86_config.h"
 
-isr_from_kernel:
-	pop %eax
-	pusha			/* save eax -> edi */
-				/* save eax -> edi */
-isr_from_user:
-	pop %eax
-	push $USER_ES		/* segment selector */	
-	push $USER_CS
+.extern current
+.extern next_run
+.extern update_tss
+
+.macro ISR_COMMON_HANDLER name
+	mov 32(%esp), %ebx		/* ebx is the error code */
+
+	mov %esp, %eax
+	add $44, %eax			/* eax is pt_regs */
+
+	mov 40(%esp), %edx
+	and $0x3, %edx			/* irq from ring3 or ring0 */
+	cmp $0, %edx
+
+	jne isr_from_user_\name		/* nerver return */
+	push $0
+	push $KERNEL_SS
+
+	push $KERNEL_ES			/* kernel segment selector */
+	push $KERNEL_DS
+	push $KERNEL_FS
+	push $KERNEL_GS
+	jmp do_isr_handler_\name
+
+isr_from_user_\name:
+	sub $4, %esp			/* user esp */
+	mov -52(%esp), %edx
+	mov %edx, (%esp)
+
 	push $USER_SS
+	push $USER_ES			/* user segment selector */
 	push $USER_DS
 	push $USER_FS
 	push $USER_GS
-	pusha			/* edi --- eax */
-	sub $8, %esi
-	mov %esi, %ecx	
-	sub $64, %ecx
-/*	mov 16(%ecx), 4(%esi)*/	/* eflags */
-/*	mov 8(%ecx), (%esi) */	/* eip */
-/*	mov (%ecx), (%ebx) */
 
-isr_common_stub:
-	push %eax			/* save eax temp */
-	mov 12(%esi), %eax
-	and $0x3, %eax			/* irq from ring3 or ring0 */
-	cmp $0, %eax
-	jne isr_from_user		/* nerver return */
-	jmp isr_from_kernel
+do_isr_handler_\name:
+	lea current, %edx
+	mov (%edx), %edx
+	mov %esp, (%edx)		/* store the current statck to the task_struct */
+
+	mov $SYSTEM_ISR_STACK_BASE, %esp
+	call %ecx
+
+	lea current, %eax
+	lea next_run, %ebx
+
+	mov (%eax), %ecx
+	mov (%ebx), %edx
+
+	mov %edx, (%eax)	/* current = next_run */
+	mov (%edx), %eax		/* eax is the task_struct which will run later */
+	call update_tss		/* set up tss */
+
+	mov (%edx), %esp	/* switch stack */
+	pop %gs
+	pop %fs
+	pop %ds
+	pop %es
+	add $8, %esp
+	popa
+.endm
+
+/************************************************************** */
+isr_common_stub_nec:
+	ISR_COMMON_HANDLER nec
+	add $4, %esp
+	iret
+/************************************************************** */
+
+
+/****************************************************************/
+isr_common_stub_ec:
+	ISR_COMMON_HANDLER ec
+	iret
+/****************************************************************/
 
 .extern x86_trap_handler_de
 .extern x86_trap_handler_de
@@ -52,7 +101,6 @@ isr_common_stub:
 .extern x86_trap_handler_nc
 .extern x86_trap_handler_xf
 .extern x86_trap_handler_undef
-
 .extern x86_int_handler
 
 .macro TRAP_NOERRCODE name vec_no
@@ -60,9 +108,10 @@ isr_common_stub:
 	.align 8
 	x86_trap_\name:
 	cli
-	push $0
-	push x86_trap_handler_\name
-	jmp isr_common_stub
+	push $0				/* error code */
+	pusha
+	lea x86_trap_handler_\name, %ecx
+	jmp isr_common_stub_nec
 .endm
 
 .macro TRAP_ERRCODE name vec_no
@@ -70,8 +119,9 @@ isr_common_stub:
 	.align 8
 	x86_trap_\name:
 	cli
-	push x86_trap_handler_\name
-	jmp isr_common_stub
+	pusha
+	lea x86_trap_handler_\name, %ecx
+	jmp isr_common_stub_ec
 .endm
 
 .macro	IRQ vec_no
@@ -80,17 +130,28 @@ isr_common_stub:
 	x86_irq_\vec_no:
 	cli
 	push \vec_no + 32
-	push x86_int_handler
-	jmp isr_common_stub
+	pusha
+	lea x86_int_handler, %ecx
+	jmp isr_common_stub_nec
 .endm
 
 .global x86_trap_undef
 .align 8
 x86_trap_undef:
 	cli
-	push x86_trap_handler_undef
-	jmp isr_common_stub
+	pusha
+	lea x86_trap_handler_undef, %ecx
+	jmp isr_common_stub_nec
 
+.extern x86_trap_syscall_handler		/* this is for syscall */
+.global x86_trap_syscall
+.align 8
+x86_trap_syscall:
+	cli
+	push %eax				/* eax is the syscall number */
+	pusha
+	lea x86_trap_syscall_handler, %ecx
+	jmp isr_common_stub_nec
 
 .align 8
 TRAP_NOERRCODE de 	0
