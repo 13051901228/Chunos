@@ -33,7 +33,7 @@ struct pid_map pid_map;
  * the related prio is in PROCESS_STATE_RUNNING
  * count means how many running task is in this prio
  */
-static struct sched_list os_sched_table[MAX_PRIO];
+static struct sched_list os_sched_table[TASK_MAX_PRIO];
 
 /*
  * represent the current running task
@@ -146,12 +146,11 @@ typedef enum _state_change_t {
 	STATE_NONE_TO_NONE,
 } state_change_t;
 
-static char change_table[PROCESS_STATE_UNKNOWN][PROCESS_STATE_UNKNOWN] = {
-	STATE_NONE_TO_NONE
-};
+static char change_table[PROCESS_STATE_UNKNOWN + 1][PROCESS_STATE_UNKNOWN + 1];
 
 static void init_state_change_table(void)
 {
+	memset(change_table, STATE_NONE_TO_NONE, sizeof(change_table));
 	change_table[PROCESS_STATE_UNKNOWN][PROCESS_STATE_PREPARE] = STATE_NONE_TO_PREPARE; 
 	change_table[PROCESS_STATE_UNKNOWN][PROCESS_STATE_SLEEP] = STATE_NONE_TO_SLEEP;
 	change_table[PROCESS_STATE_PREPARE][PROCESS_STATE_RUNNING] = STATE_PREPARE_TO_RUNNING;
@@ -258,13 +257,15 @@ static int init_pid_allocater(void)
 
 static void get_task_run_time(struct task_struct *task)
 {
-	task->run_time = 5 + (MAX_PRIO - task->prio);
-	debug("Task %s run time is %d\n",task->name, task->run_time);
+	task->run_time = 5 + (TASK_MAX_PRIO - task->prio);
 }
 
 int init_sched_struct(struct task_struct *task)
 {
-	set_task_prio
+	if (task != idle)
+		task->prio = TASK_DEFAULT_PRIO;
+	else
+		task->prio = TASK_MAX_PRIO - 1;
 
 	/*  this value will be set to a default value later */
 	get_task_run_time(task);
@@ -353,7 +354,7 @@ int set_task_prio(struct task_struct *task, int prio)
 {
 	state_t state = get_task_state(task);
 
-	if (prio >= MAX_PRIO)
+	if (prio >= TASK_MAX_PRIO)
 		return -EINVAL;
 
 	switch (state) {
@@ -386,44 +387,42 @@ int set_task_prio(struct task_struct *task, int prio)
 	return 0;
 }
 
-static struct task_struct *find_next_run_task(void)
+void find_next_run_task(void)
 {
 	int i;
 	struct list_head *task_head;
 	struct task_struct *task;
 
 	/* idle process is always on preparing state */
-	for (i = 0; i < MAX_PRIO - 1; i++) {
-		if (os_sched_table[i].count) {
+	for (i = 0; i < TASK_MAX_PRIO; i++) {
+		if (os_sched_table[i].count)
 			break;
-		}
 	}
 
 	/* if there only one task need to sched return itself */
-	if (i == (MAX_PRIO - 1)) {
-			return current;
-	}
+	if (i == TASK_MAX_PRIO)
+			return;
 
 	task_head = &os_sched_table[i].list;
 	task = list_first_entry(task_head,
 			struct task_struct,
 			prio_running);
 
-	return task;
+	next_run = task;
 }
 
 void dec_prio(struct task_struct *task)
 {
 
 	/*
-	 * idle task will stay at MAX_PRIO -1 list
-	 * and other task will not stay at MAX_PRIO list
+	 * idle task will stay at TASK_MAX_PRIO -1 list
+	 * and other task will not stay at TASK_MAX_PRIO list
 	 */
-	if (task->prio < (MAX_PRIO -1))
+	if (task->prio < (TASK_MAX_PRIO -1))
 		task->prio++;
 
 	if (task->pid != (-1)) {
-		if (task->prio == (MAX_PRIO -1))
+		if (task->prio == (TASK_MAX_PRIO -1))
 			task->prio = 0;
 	}
 }
@@ -446,6 +445,9 @@ static int prepare_to_switch(void)
 	 * put it to the low pro list. otherwise keep it in the
 	 * origin list and don not change its run time. if task
 	 * drop his run time (call shced()), also dec its prio
+	 *
+	 * if the task's state is not running, then it's state
+	 * was not been set by sched
 	 */
 	if (state == PROCESS_STATE_RUNNING) {
 		if ((current->run_time == 0) || (!in_interrupt)) {
@@ -462,31 +464,28 @@ static int prepare_to_switch(void)
 	next->wait_time = -1;
 	set_task_state(next, PROCESS_STATE_RUNNING);
 
-re_run:
-	/* delete from prepare list and ready to run. */
-	next->run_count++;
-
 	return 0;
+
+re_run:
+	next->run_count++;
+	return -EAGAIN;
 }
 
 void sched(void)
 {
 	unsigned long flags; 
 
-	if (in_interrupt) {
-		debug("Do not call sched in interrupt\n");
+	if (in_interrupt)
 		return;
-	}
 
-	if (!schedule_running) {
-		debug("Schedule has not benn init\n");
+	if (!schedule_running)
 		return;
-	}
 
 	enter_critical(&flags);
 
-	next_run = find_next_run_task();
-	prepare_to_switch();
+	find_next_run_task();
+	if (prepare_to_switch())
+		goto re_run;
 
 	/*
 	 * in below function, the task will be change to next_run.
@@ -496,6 +495,7 @@ void sched(void)
 	 */
 	arch_switch_task_sw();
 
+re_run:
 	exit_critical(&flags);
 }
 
@@ -516,9 +516,8 @@ int os_tick_handler(void *arg)
 		}
 
 		/* task has timeout and need to wake up */
-		if (task->wait_time == 0) {
+		if (task->wait_time == 0)
 			set_task_state(task, PROCESS_STATE_PREPARE);
-		}
 	}
 
 	/*
@@ -529,7 +528,7 @@ int os_tick_handler(void *arg)
 	 */
 	current->run_time--;
 	if (current->run_time == 0) {
-		next_run = find_next_run_task();
+		find_next_run_task();
 		prepare_to_switch();
 	}
 
@@ -601,7 +600,7 @@ int sched_init(void)
 {
 	int i;
 
-	for (i = 0; i< MAX_PRIO; i++){
+	for (i = 0; i< TASK_MAX_PRIO; i++){
 		init_list(&os_sched_table[i].list);
 		os_sched_table[i].count = 0;
 	}
