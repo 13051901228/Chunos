@@ -191,7 +191,7 @@ struct file_desc *alloc_and_init_file_desc(struct file_desc *p)
 
 	fd = kzalloc(sizeof(struct file_desc), GFP_KERNEL);
 	if (!fd)
-		return -EINVAL;
+		return NULL;
 
 	fd->file_open[0] = __sys_open("/dev/ttyS0", O_RDWR);
 	fd->file_open[1] = __sys_open("/dev/ttyS0", O_RDWR);

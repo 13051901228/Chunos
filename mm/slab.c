@@ -12,9 +12,9 @@
 #define SLAB_CACHE_SIZE	(1 * 1024 * 1024)
 
 #ifdef	DEBUG_SLAB
-#define debug(fmt, ...)	kernel_debug(fmt, ##__VA_ARGS__)
+#define slab_debug(fmt, ...)	pr_debug("[ SLAB: ]", fmt, ##__VA_ARGS__)
 #else
-#define debug(fmt, ...)
+#define slab_debug(fmt, ...)
 #endif
 
 /* 
@@ -358,7 +358,9 @@ void kfree(void *addr)
 	if (!addr)
 		return;
 
-	debug("kfree free address is 0x%x\n", (unsigned long)addr);
+	slab_debug("Kfree free address is 0x%x\n",
+			(unsigned long)addr);
+
 	mutex_lock(&pslab->slab_mutex);
 	header = base_to_header(addr);
 	if (header->magic != SLAB_MAGIC) {
@@ -376,6 +378,7 @@ out:
 
 int slab_init(void)
 {
+	kernel_info("Slab memory allocater init...");
 	memset((char *)pslab, 0, sizeof(struct slab));
 	init_list(&pslab->plist);
 	pslab->pool = slab_pool;

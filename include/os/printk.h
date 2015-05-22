@@ -1,7 +1,6 @@
 #ifndef _PRINTK_H
 #define _PRINTK_H
 
-int uart_puts(char *buf);
 int level_printk(const char *fmt, ...);
 
 #define	pr_debug(module, fmt, ...)		level_printk("4""<D>" module fmt, ##__VA_ARGS__)

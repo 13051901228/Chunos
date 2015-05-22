@@ -159,11 +159,6 @@ u32 arch_build_tlb_des(unsigned long pa, u32 attr)
 	return 0;
 }
 
-int uart_puts(char *str)
-{
-	return 0;
-}
-
 int arch_early_init(void)
 {
 	return 0;

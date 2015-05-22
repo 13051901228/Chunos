@@ -600,6 +600,8 @@ int sched_init(void)
 {
 	int i;
 
+	kernel_info("Process scheduler init...\n");
+
 	for (i = 0; i< TASK_MAX_PRIO; i++){
 		init_list(&os_sched_table[i].list);
 		os_sched_table[i].count = 0;

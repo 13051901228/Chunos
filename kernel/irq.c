@@ -129,10 +129,12 @@ int irq_init(void)
 	int irq_table_size = IRQ_NR * sizeof(struct irq_des);
 	struct soc_platform *platform = get_platform();
 
+	kernel_info("System IRQ init...\n");
+
 	nr = page_nr(irq_table_size);
 	irq_table_base = get_free_pages(nr, GFP_KERNEL);
 	if(irq_table_base == NULL){
-		kernel_error("can not allocate size for irq_table\n");
+		kernel_error("Can not allocate size for irq_table\n");
 		return -ENOMEM;
 	}
 

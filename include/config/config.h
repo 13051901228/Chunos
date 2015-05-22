@@ -14,11 +14,11 @@
 
 #define SLAB_MAX_SIZE			10
 
-//#define DEBUG_MM			1
-//#define DEBUG_SLAB			1
-//#define DEBUG_PROCESS			1
-//#define DEBUG_SCHED			1
-//#define DEBUG_MMU			1
+#define DEBUG_MM			1
+#define DEBUG_SLAB			1
+#define DEBUG_PROCESS			1
+#define DEBUG_SCHED			1
+#define DEBUG_MMU			1
 #define DEBUG_FS			1
 
 #endif

@@ -269,16 +269,10 @@ int soc_console_late_init(int baud)
 	return 0;
 }
 
-int uart_puts(char *buf)
+void uart_puts(char *buf)
 {
-	int size;
-
-	size = strlen(buf);
-
 	while (*buf)
 		platform_uart0_send_byte(*buf++);
-	
-	return size;
 }
 
 int uart_put_char(char *buf, int size)

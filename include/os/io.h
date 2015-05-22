@@ -138,9 +138,9 @@ static inline void outsl(unsigned long addr, const void *buffer, int count)
 	}
 }
 
-#define ioread8(addr)			readb(addr)
-#define ioread16(addr)			readw(addr)
-#define ioread32(addr)			readl(addr)
+#define ioread8(addr)			readb((volatile void *)addr)
+#define ioread16(addr)			readw((volatile void *)addr)
+#define ioread32(addr)			readl((volatile void *)addr)
 
 #define iowrite8(v, addr)		writeb((v), (volatile void *)(addr))
 #define iowrite16(v, addr)		writew((v), (volatile void *)(addr))

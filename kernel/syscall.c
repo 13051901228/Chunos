@@ -21,13 +21,13 @@ int install_syscall(int nr, unsigned long *addr)
 	int real_nr = nr - __NR_SYSCALL_BASE;
 
 	if (real_nr > (SYSCALL_NR - 1) || (real_nr < 0) || (!addr)) {
-		kernel_error("invaild argument for install syscall\n");
+		kernel_error("Invaild argument for install syscall\n");
 		return -EINVAL;
 	}
 
 	tmp = syscall_table_base + real_nr;
 	if (!(*tmp)) {
-		kernel_debug("install %d syscall addr is0x%x\n", nr, (u32)addr);
+		kernel_debug("Install %d syscall addr is0x%x\n", nr, (u32)addr);
 		*tmp = (unsigned long)addr;
 		error = 0;
 	}
@@ -51,9 +51,9 @@ int syscall_init(void)
 	int i;
 
 	syscall_table_base = get_free_pages(pages, GFP_KERNEL);
-	kernel_debug("syscall table base is 0x%x\n", (u32)syscall_table_base);
+	kernel_debug("Syscall table base is 0x%x\n", (u32)syscall_table_base);
 	if (!syscall_table_base) {
-		panic("can not allocate memory for syscall table\n");
+		panic("Can not allocate memory for syscall table");
 	}
 	memset((char *)syscall_table_base, 0, pages << PAGE_SHIFT);
 
@@ -64,9 +64,8 @@ int syscall_init(void)
 	nr = (syscall_table_end - syscall_table_start) / sizeof(struct syscall);
 	for (i = 0; i < nr; i++) {
 		error = install_syscall(table->nr, table->addr);
-		if (error) {
-			kernel_error("syscall %d has been registered\n", table->nr);
-		}
+		if (error)
+			kernel_error("Syscall %d has been registered\n", table->nr);
 		table++;
 	}
 

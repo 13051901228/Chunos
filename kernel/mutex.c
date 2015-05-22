@@ -64,7 +64,7 @@ void mutex_unlock(struct mutex *m)
 	 * which wait for this mutex.
 	 */
 	if (!m->count) {
-		kernel_error("mutex has not been locked\n");
+		kernel_debug("mutex has not been locked\n");
 		return;
 	}
 

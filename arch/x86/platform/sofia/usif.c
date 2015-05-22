@@ -64,26 +64,52 @@ int sofia_init_uart_usif(u32 baud)
 {
 	iowrite32(0x00000aa6, usif1_base + USIF_CLC);
 	iowrite32(0x00000001, usif1_base + USIF_CLC_CNT);
-	iowrite32(0x0, usif1_base + USIF_DMAE);
+	iowrite32(0x10806, usif1_base + USIF_MODE_CFG);
+	iowrite32(0x8, usif1_base + USIF_PRTC_CFG);
 	iowrite32(0x0, usif1_base + USIF_IMSC);
 	iowrite32(0xffffffff, usif1_base + USIF_ICR);
-	iowrite32(0x00010004, usif1_base + USIF_MODE_CFG);
+	iowrite32(0x5, usif1_base + USIF_BC_CFG);
+	iowrite32(0x01d00037, usif1_base + USIF_FDIV_CFG);
+	iowrite32(0x2200, usif1_base + USIF_FIFO_CFG);
+	iowrite32(0xaa5, usif1_base + USIF_CLC);
+
+#if 0
+	iowrite32(0x0, usif1_base + USIF_DMAE);
 	iowrite32(0x00000001, usif1_base + USIF_CLC_CNT);
 	iowrite32(0x0, usif1_base + USIF_CS_CFG);
-	iowrite32(0x01d00037, usif1_base + USIF_FDIV_CFG);
-	iowrite32(0x00000005, usif1_base + USIF_BC_CFG);
-	iowrite32(0x01E00008, usif1_base + USIF_PRTC_CFG);
 	iowrite32(0x0, usif1_base + USIF_CRC_CFG);
 	iowrite32(0x0, usif1_base + USIF_CRCPOLY_CFG);
 	iowrite32(0x0000003a, usif1_base + USIF_ICTMO_CFG);
-	iowrite32(0x2200, usif1_base + USIF_FIFO_CFG);
 	iowrite32(0x0, usif1_base + USIF_TPS_CTRL);
-	iowrite32(0xaa5, usif1_base + USIF_CLC);
 	iowrite32(0x11, usif1_base + USIF_FIFO_CTRL);
 
 	/* enable rx interrupt */
 	/* iowrite32(0xa, usif1_base + USIF_IMSC); */
-
+#endif
 	return 0;
 }
 
+static inline void early_xgold_usif_putc(char s)
+{
+	while ((ioread32(USIF_FIFO_STAT + usif1_base) & 0xff0000 ) >> 0x10);
+
+	iowrite32(1, USIF_FIFO_CTRL + usif1_base);
+	iowrite32(s, USIF_TXD + usif1_base);
+}
+
+void uart_puts(char *str)
+{
+	int i;
+	unsigned long flag;
+
+	enter_critical(&flag);
+
+	for (i = 0; *str; i++) {
+		if (*str == '\n')
+			early_xgold_usif_putc('\r');
+		early_xgold_usif_putc(*str);
+		str++;
+	}
+
+	exit_critical(&flag);
+}

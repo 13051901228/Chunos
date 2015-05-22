@@ -16,6 +16,8 @@
 
 #define LOG_BUFFER_SIZE		(8192)
 
+extern void uart_puts(char *buf);
+
 struct log_buffer {
 	spin_lock_t buffer_lock;
 	int head;
@@ -176,9 +178,9 @@ static int update_log_buffer(char *buf, int printed)
 	return 0;
 }
 
-int early_printk(char *str)
+static inline void early_printk(char *str)
 {
-	return uart_puts(str);
+	uart_puts(str);
 }
 
 int level_printk(const char *fmt,...)

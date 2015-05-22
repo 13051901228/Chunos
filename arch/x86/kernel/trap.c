@@ -12,107 +12,107 @@
 
 void x86_trap_handler_de(int errcode)
 {
-	panic("DE FAULT\n");
+	panic("DE FAULT");
 }
 
 void x86_trap_handler_db(int errcode)
 {
-	panic("DB FAULT\n");
+	panic("DB FAULT");
 }
 
 void x86_trap_handler_nmi(int errcode)
 {
-	panic("NMI FAULT\n");
+	panic("NMI FAULT");
 }
 
 void x86_trap_handler_bp(int errcode)
 {
-	panic("BP FAULT\n");
+	panic("BP FAULT");
 }
 
 void x86_trap_handler_of(int errcode)
 {
-	panic("OF FAULT\n");
+	panic("OF FAULT");
 }
 
 void x86_trap_handler_br(int errcode)
 {
-	panic("BR FAULT\n");
+	panic("BR FAULT");
 }
 
 void x86_trap_handler_ud(int errcode)
 {
-	panic("UD FAULT\n");
+	panic("UD FAULT");
 }
 
 void x86_trap_handler_nm(int errcode)
 {
-	panic("NM FAULT\n");
+	panic("NM FAULT");
 }
 
 void x86_trap_handler_df(int errcode)
 {
-	panic("DF FAULT\n");
+	panic("DF FAULT");
 }
 
 void x86_trap_handler_old_mf(int errcode)
 {
-	panic("MF FAULT\n");
+	panic("MF FAULT");
 }
 
 void x86_trap_handler_ts(int errcode)
 {
-	panic("TS FAULT\n");
+	panic("TS FAULT");
 }
 
 void x86_trap_handler_np(int errcode)
 {
-	panic("NP FAULT\n");
+	panic("NP FAULT");
 }
 
 void x86_trap_handler_ss(int errcode)
 {
-	panic("SS FAULT\n");
+	panic("SS FAULT");
 }
 
 void x86_trap_handler_gp(int errcode)
 {
-	panic("GP FAULT\n");
+	panic("GP FAULT");
 }
 
 void x86_trap_handler_pf(int errcode)
 {
-	panic("PF FAULT\n");
+	panic("PF FAULT");
 }
 
 void x86_trap_handler_spurious(int errcode)
 {
-	panic("SPURIOUS FAULT\n");
+	panic("SPURIOUS FAULT");
 }
 
 void x86_trap_handler_mf(int errcode)
 {
-	panic("MF FAULT\n");
+	panic("MF FAULT");
 }
 
 void x86_trap_handler_ac(int errcode)
 {
-	panic("AC FAULT\n");
+	panic("AC FAULT");
 }
 
 void x86_trap_handler_nc(int errcode)
 {
-	panic("NC FAULT\n");
+	panic("NC FAULT");
 }
 
 void x86_trap_handler_xf(int errcode)
 {
-	panic("XF FAULT\n");
+	panic("XF FAULT");
 }
 
 void x86_trap_handler_undef(int errcode)
 {
-	panic("UNDEF isr\n");
+	panic("UNDEF isr");
 }
 
 int x86_trap_syscall_handler(pt_regs *regs, int errno)

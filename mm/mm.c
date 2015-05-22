@@ -26,13 +26,9 @@ typedef enum __mm_zone_t {
 } mm_zone_t;
 
 #ifdef DEBUG_MM
-#define mm_debug(fmt, ...)	pr_debug("[  mm:  ] ", fmt,##__VA_ARGS__)
-#define mm_info(fmt, ...)	pr_info("[  mm:  ] ", fmt,##__VA_ARGS__)
-#define mm_error(fmt, ...)	pr_error("[  mm:  ] ", fmt,##__VA_ARGS__)
+#define mm_debug(fmt, ...)	pr_debug("[  MM:  ]", fmt, ##__VA_ARGS__)
 #else
 #define mm_debug(fmt, ...)
-#define mm_info(fmt, ...)
-#define mm_error(fmt, ...)
 #endif
 
 /*
@@ -300,13 +296,19 @@ static int do_map_kernel_memory(void)
 
 		zone = &mm_bank->zone[i];
 		for (j = 0; j < zone->nr_section; j++) {
+			unsigned long start, end;
+
+			start = section->vir_start;
+			end = section->vir_start + section->size;
+
 			section = &zone->memory_section[j];
 			if (!section->maped_size)
 				continue;
-			if ((KERNEL_VIRTUAL_BASE >= section->vir_start) &&
-			    (KERNEL_VIRTUAL_BASE < (section->vir_start + section->size))) {
-				mm_info("Skip already maped memeory \
-						0x%x\n", already_map);
+
+			if ((KERNEL_VIRTUAL_BASE >= start) &&
+					(KERNEL_VIRTUAL_BASE < end)) {
+				kernel_info("Skip Boot Memeory 0x%x\n",
+						already_map);
 				map_boot_section(section, already_map, flag);
 			} else {
 				build_kernel_pde_entry(section->vir_start,
@@ -674,7 +676,7 @@ static void init_user_zone(void)
 
 int mm_init(void)
 {
-	mm_info("Init memory management\n");
+	kernel_info("Memory management init...\n");
 
 	/*
 	 * before map kernel memory, need to analyse the soc
@@ -846,7 +848,7 @@ get_free_pages_from_section(struct mm_section *section,
 				section->bm_current, 0,
 				section->nr_page, count);
 	if (index < 0) {
-		mm_error("Can not find %d continous pages\n", count);
+		kernel_error("Can not find %d continous pages\n", count);
 		return 0;
 	}
 
@@ -989,7 +991,7 @@ void update_bm_current(struct mm_section *section)
 	}
 
 	section->bm_current -= count;
-	mm_debug("update bm_current count:%d current %d\n",
+	mm_debug("Update bm_current count:%d current %d\n",
 			count, section->bm_current);
 }
 
@@ -1046,7 +1048,7 @@ void free_pages(void *addr)
 	 * geted by get_free_pages
 	 */
 	if (!is_align((unsigned long)addr, PAGE_SIZE)) {
-		mm_error("address not a page address\n");
+		kernel_error("Address not a page address\n");
 		return;
 	}
 

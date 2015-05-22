@@ -10,12 +10,6 @@
 #include <config/config.h>
 #include <os/panic.h>
 
-#ifdef DEBUG_MMU
-#define mmu_debug(fmt, ...) kernel_debug(fmt, ##__VA_ARGS__)
-#else
-#define mmu_debug(fmt, ...)
-#endif
-
 static struct mmu *mmu;
 
 #define MMU_MAP_SECTION		0
@@ -104,9 +98,10 @@ void inline mmu_clear_pde_entry(unsigned long pde)
 
 int mmu_init(void)
 {
+	kernel_info("Get system MMU...\n");
 	mmu = get_soc_mmu();
 	if (!mmu)
-		panic("No mmu found please disable mmu function\n");
+		panic("No MMU found in system");
 
 	return 0;
 }
