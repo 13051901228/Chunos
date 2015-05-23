@@ -1,6 +1,7 @@
 #include <os/types.h>
 #include <os/string.h>
 #include <os/errno.h>
+#include <config/config.h>
 
 int absolute(int num)
 {
@@ -179,7 +180,7 @@ char *strchr(char *src, char ch)
 	return (char *)src;
 }
 
-#if 0
+#ifndef CONFIG_HAS_ARCH_MEMCPY
 int memcpy(void *target, void *source, int size)
 {
 	char *t = (char *)target;
@@ -196,7 +197,7 @@ int memcpy(void *target, void *source, int size)
 }
 #endif
 
-#if 0
+#ifndef CONFIG_HAS_ARCH_MEMSET
 void memset(char *base, char ch, int size)
 {
 	int i;

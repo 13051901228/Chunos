@@ -8,67 +8,67 @@
 .extern switch_task
 
 .macro ISR_COMMON_HANDLER name
-	mov 32(%esp), %ebx		/* ebx is the error code */
+	mov 	32(%esp), %ebx			/* ebx is the error code */
 
-	mov %esp, %eax
-	add $44, %eax			/* eax is pt_regs */
+	mov 	%esp, %eax
+	add 	$44, %eax			/* eax is pt_regs */
 
-	mov 40(%esp), %edx
-	and $0x3, %edx			/* irq from ring3 or ring0 */
-	cmp $0, %edx
+	mov 	40(%esp), %edx
+	and 	$0x3, %edx			/* irq from ring3 or ring0 */
+	cmp 	$0, %edx
 
-	jne isr_from_user_\name		/* nerver return */
-	push $0
-	push $KERNEL_SS
+	jne 	isr_from_user_\name		/* nerver return */
+	push 	$0
+	push 	$KERNEL_SS
 
-	push $KERNEL_ES			/* kernel segment selector */
-	push $KERNEL_DS
-	push $KERNEL_FS
-	push $KERNEL_GS
-	jmp do_isr_handler_\name
+	push 	$KERNEL_ES			/* kernel segment selector */
+	push 	$KERNEL_DS
+	push 	$KERNEL_FS
+	push 	$KERNEL_GS
+	jmp 	do_isr_handler_\name
 
 isr_from_user_\name:
-	sub $4, %esp			/* user esp */
-	mov -52(%esp), %edx
-	mov %edx, (%esp)
+	sub 	$4, %esp			/* user esp */
+	mov 	-52(%esp), %edx
+	mov 	%edx, (%esp)
 
-	push $USER_SS
-	push $USER_ES			/* user segment selector */
-	push $USER_DS
-	push $USER_FS
-	push $USER_GS
+	push 	$USER_SS
+	push 	$USER_ES			/* user segment selector */
+	push 	$USER_DS
+	push 	$USER_FS
+	push 	$USER_GS
 
 do_isr_handler_\name:
-	call %ecx
+	call 	%ecx
 
-	lea current, %ecx
-	lea next_run, %edx
-	mov (%ecx), %eax
-	mov (%edx), %ebx
-	mov %esp, (%eax)	/* store the stack base to current process */
+	lea 	current, %ecx
+	lea 	next_run, %edx
+	mov 	(%ecx), %eax
+	mov 	(%edx), %ebx
+	mov 	%esp, (%eax)			/* store the stack base to current process */
 
-	call switch_task
+	call 	switch_task
 
-	lea current, %ecx
-	lea next_run, %edx
-	mov (%ecx), %eax
-	mov (%edx), %ebx
+	lea 	current, %ecx
+	lea 	next_run, %edx
+	mov 	(%ecx), %eax
+	mov 	(%edx), %ebx
 
-	mov %ebx, (%ecx)	/* current = next_run */
-	mov (%ebx), %esp	/* stack base of next run task */
+	mov 	%ebx, (%ecx)			/* current = next_run */
+	mov 	(%ebx), %esp			/* stack base of next run task */
 
-	pop %gs
-	pop %fs
-	pop %ds
-	pop %es
-	add $8, %esp
+	pop 	%gs
+	pop 	%fs
+	pop 	%ds
+	pop 	%es
+	add 	$8, %esp
 	popa
 .endm
 
 /************************************************************** */
 isr_common_stub_nec:
 	ISR_COMMON_HANDLER nec
-	add $4, %esp
+	add 	$4, %esp
 	iret
 /************************************************************** */
 
@@ -108,10 +108,10 @@ isr_common_stub_ec:
 	.align 8
 	x86_trap_\name:
 	cli
-	push $0				/* error code */
+	push $0					/* error code */
 	pusha
-	lea x86_trap_handler_\name, %ecx
-	jmp isr_common_stub_nec
+	lea 	x86_trap_handler_\name, %ecx
+	jmp 	isr_common_stub_nec
 .endm
 
 .macro TRAP_ERRCODE name vec_no
@@ -120,8 +120,8 @@ isr_common_stub_ec:
 	x86_trap_\name:
 	cli
 	pusha
-	lea x86_trap_handler_\name, %ecx
-	jmp isr_common_stub_ec
+	lea 	x86_trap_handler_\name, %ecx
+	jmp 	isr_common_stub_ec
 .endm
 
 .macro	IRQ vec_no
@@ -129,10 +129,10 @@ isr_common_stub_ec:
 	.align 8
 	x86_irq_\vec_no:
 	cli
-	push \vec_no + 32
+	push 	\vec_no + 32
 	pusha
-	lea x86_int_handler, %ecx
-	jmp isr_common_stub_nec
+	lea 	x86_int_handler, %ecx
+	jmp 	isr_common_stub_nec
 .endm
 
 .global x86_trap_undef
@@ -140,18 +140,18 @@ isr_common_stub_ec:
 x86_trap_undef:
 	cli
 	pusha
-	lea x86_trap_handler_undef, %ecx
-	jmp isr_common_stub_nec
+	lea 	x86_trap_handler_undef, %ecx
+	jmp 	isr_common_stub_nec
 
 .extern x86_trap_syscall_handler		/* this is for syscall */
 .global x86_trap_syscall
 .align 8
 x86_trap_syscall:
 	cli
-	push %eax				/* eax is the syscall number */
+	push 	%eax				/* eax is the syscall number */
 	pusha
-	lea x86_trap_syscall_handler, %ecx
-	jmp isr_common_stub_nec
+	lea 	x86_trap_syscall_handler, %ecx
+	jmp 	isr_common_stub_nec
 
 .align 8
 TRAP_NOERRCODE de 	0

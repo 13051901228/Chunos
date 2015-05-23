@@ -7,7 +7,7 @@
 #include <os/syscall.h>
 #include <os/kernel.h>
 
-#ifdef	DEBUG_SCHED
+#ifdef	CONFIG_DEBUG_SCHED
 #define debug(fmt, ...)	kernel_debug(fmt, ##__VA_ARGS__)
 #else
 #define debug(fmt, ...)

@@ -38,8 +38,13 @@ extern unsigned long init_call_end;
 
 int cpu_idle(void)
 {
-	kernel_debug("in idle\n");
+	kernel_info("in idle\n");
 	return 0;
+}
+
+int hello(void)
+{
+	printk("hello world\n");
 }
 
 int main(void)
@@ -93,6 +98,7 @@ int main(void)
 	__asm("int $20");
 
 	kthread_run("system_killer", system_killer, NULL);
+	//kthread_run("hello", hello, NULL);
 
 	//init_task();
 

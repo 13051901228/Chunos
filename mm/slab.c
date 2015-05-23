@@ -11,7 +11,7 @@
 
 #define SLAB_CACHE_SIZE	(1 * 1024 * 1024)
 
-#ifdef	DEBUG_SLAB
+#ifdef	CONFIG_DEBUG_SLAB
 #define slab_debug(fmt, ...)	pr_debug("[ SLAB: ]", fmt, ##__VA_ARGS__)
 #else
 #define slab_debug(fmt, ...)

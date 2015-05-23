@@ -18,7 +18,7 @@
 #include <os/mmap.h>
 #include <sys/sig.h>
 
-#ifdef	DEBUG_PROCESS
+#ifdef	CONFIG_DEBUG_PROCESS
 #define debug(fmt, ...)	kernel_debug(fmt, ##__VA_ARGS__)
 #else
 #define debug(fmt, ...)
@@ -272,14 +272,12 @@ static void inline init_pt_regs(pt_regs *regs, void *fn, void *arg)
 
 int kthread_run(char *name, int (*fn)(void *arg), void *arg)
 {
-	u32 flag = 0;
 	pt_regs regs;
 
-	flag |= PROCESS_TYPE_KERNEL;	
 	memset(&regs, 0, sizeof(pt_regs));
 	init_pt_regs(&regs, (void *)fn, arg);
 
-	return do_fork(name, &regs, flag);
+	return do_fork(name, &regs, PROCESS_TYPE_KERNEL);
 }
 
 void release_task(struct task_struct *task)

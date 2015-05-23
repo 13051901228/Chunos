@@ -25,7 +25,7 @@ typedef enum __mm_zone_t {
 	MM_ZONE_UNKNOWN,
 } mm_zone_t;
 
-#ifdef DEBUG_MM
+#ifdef CONFIG_DEBUG_MM
 #define mm_debug(fmt, ...)	pr_debug("[  MM:  ]", fmt, ##__VA_ARGS__)
 #else
 #define mm_debug(fmt, ...)

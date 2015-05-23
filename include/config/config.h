@@ -10,15 +10,17 @@
 #define SYSTEM_TIMER_IRQ_NUMBER		14
 
 /* update diet-libc to 0.33, using EABI */
-//#define SYSCALL_OLD_EABI		1
+//#define CONFIG_SYSCALL_OLD_EABI
 
 #define SLAB_MAX_SIZE			10
 
-#define DEBUG_MM			1
-#define DEBUG_SLAB			1
-#define DEBUG_PROCESS			1
-#define DEBUG_SCHED			1
-#define DEBUG_MMU			1
-#define DEBUG_FS			1
+#define CONFIG_DEBUG_MM
+#define CONFIG_DEBUG_SLAB
+#define CONFIG_DEBUG_PROCESS
+#define CONFIG_DEBUG_SCHED
+#define CONFIG_DEBUG_FS
+
+#define CONFIG_HAS_ARCH_MEMSET
+#define CONFIG_HAS_ARCH_MEMCPY
 
 #endif

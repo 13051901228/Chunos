@@ -40,7 +40,7 @@ struct mmu_ops {
 
 	unsigned long (*pte_to_pa)(unsigned long pte);
 
-	void (*invalid_pgt)(void);
+	void (*invalid_tlb)(void);
 };
 
 struct mmu {

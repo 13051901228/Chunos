@@ -41,7 +41,6 @@ int build_kernel_pde_entry(unsigned long vstart,
 	if ((pstart - pa != 0) || (vstart - va != 0))
 		return -EINVAL;
 
-	flag |= PDE_ATTR_PDE;
 	pde_addr = mmu->kernel_tlb_base +
 		(va / PDE_ALIGN_SIZE) * sizeof(unsigned long);
 
@@ -52,7 +51,7 @@ int build_kernel_pde_entry(unsigned long vstart,
 		size -= PDE_ALIGN_SIZE;
 	}
 
-	mmu->mmu_ops->invalid_pgt();
+	mmu->mmu_ops->invalid_tlb();
 
 	return 0;
 }

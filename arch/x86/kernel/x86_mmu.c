@@ -36,6 +36,14 @@ x86_build_pde_entry(unsigned long pde_address,
 		unsigned long pa, int flag)
 {
 	pa |= (PDE_PS | PDE_RW | PDE_P);
+
+	/*
+	 * if memory type is IO or DMA, must set the
+	 * cache type to uncached
+	 */
+	if ((flag & PDE_ATTR_DMA_MEMORY) || (flag & PDE_ATTR_IO_MEMORY))
+		pa |= PDE_PCD;
+
 	*(unsigned long *)pde_address = pa;
 }
 
@@ -43,6 +51,8 @@ static void inline
 x86_build_pte_pde_entry(unsigned long pde,
 		unsigned long pa, int flag)
 {
+	/* use to map user PDE and use as a 4K page */
+
 	pa |= (PDE_P | PDE_RW);
 	*(unsigned long *)pde = pa;
 }
@@ -77,7 +87,7 @@ static inline unsigned long x86_pte_to_pa(unsigned long pte)
 	return (*(unsigned long *)pte) & (0xffffff00);
 }
 
-static inline void x86_invalid_pgt(void)
+static inline void x86_invalid_tlb(void)
 {
 
 }
@@ -90,7 +100,7 @@ struct mmu_ops x86_mmu_ops = {
 	.clear_pte_pde_entry	= x86_clear_pte_pde_entry,
 	.pte_to_pa		= x86_pte_to_pa,
 	.pte_pde_to_pa		= x86_pte_pde_to_pa,
-	.invalid_pgt		= x86_invalid_pgt,
+	.invalid_tlb		= x86_invalid_tlb,
 };
 
 struct mmu x86_mmu = {
