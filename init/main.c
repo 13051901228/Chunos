@@ -47,6 +47,19 @@ int hello(void)
 	printk("hello world\n");
 }
 
+int test(int a, int b)
+{
+	a += 10;
+	b += 20;
+}
+
+void test1(void)
+{
+	int a = 10;
+	int b =11;
+	test(a, b);
+}
+
 int main(void)
 {
 	int i = 0;
@@ -57,6 +70,7 @@ int main(void)
 	 * this function can let us use printk before 
 	 * kernel mmu page table build
 	 */
+	test1();
 	disable_irqs();
 	arch_early_init();
 	log_buffer_init();

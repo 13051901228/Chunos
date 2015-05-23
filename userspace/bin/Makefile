@@ -7,18 +7,18 @@ OBJDUMP 	:= $(CROSS_COMPILE)objdump
 AR	 	:= $(CROSS_COMPILE)ar
 STRIP	 	:= $(CROSS_COMPILE)strip
 
-LIBC_DIR	:= $(shell pwd)/../diet-libc-$(ARCH)
-LIBS_DIR	:= $(LIBC_DIR)/lib
+LIBC_DIR	:= $(shell pwd)/../dietlibc
+LIBS_DIR	:= $(LIBC_DIR)/libc-$(ARCH)
 INCLUDE_DIR 	:= $(LIBC_DIR)/include
 
 OUT 		:= $(shell pwd)/../../out/userspace/bin
 RAMDISK_BIN 	:= ../../out/ramdisk/bin
 
 LDS 		:= $(shell pwd)/app.lds
-CCFLAG 		:= -nostdlib -fno-builtin -I$(INCLUDE_DIR)
+CCFLAG 		:= -nostdlib -fno-builtin --static -fno-pic -I$(INCLUDE_DIR)
 LDFLAG 		:= -T$(LDS) -nostdlib
-LDPATH 		:= -ldietlibc -lgcc -lm -L$(LIBS_DIR)
-LDLIBS		:= $(LIBS_DIR)/start.o $(LIBS_DIR)/raise.o $(LIBS_DIR)/__aeabi_unwind_cpp.o
+LDPATH 		:= -ldietlibc -lm -lgcc -L$(LIBS_DIR)
+LDLIBS		:= $(LIBS_DIR)/start.o $(LIBS_DIR)/raise.o
 
 #OBJ_DIRS	: find all the directory which may contains an application
 #target_tmp	: tmp target list 

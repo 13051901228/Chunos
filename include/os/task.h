@@ -18,7 +18,6 @@
 #include <os/task_mm.h>
 
 #define KERNEL_STACK_SIZE	(SIZE_4K)
-#define PROCESS_STACK_SIZE	(4 * PAGE_SIZE)		/* 16k stack size */
 #define PROCESS_IMAGE_SIZE	(256 * PAGE_SIZE)	/* 1M stack size */
 
 #define PROCESS_NAME_SIZE	255

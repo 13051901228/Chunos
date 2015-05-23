@@ -13,7 +13,7 @@ INCLUDE_DIR 	:= include/os/*.h include/asm/*.h include/config/*.h include/sys/*.
 CCFLAG 		:=-Wall --static -nostdlib -fno-builtin -g -fno-pic -I$(PWD)/include
 LDS 		:= arch/$(ARCH)/kernel/lds/kernel.lds
 LDFLAG 		:= -T$(LDS)
-LDPATH 		:= -L/opt/i686-linux-android-4.6/lib/gcc/i686-linux-android/4.6.x-google
+#LDPATH 		:= -L/opt/i686-linux-android-4.6/lib/gcc/i686-linux-android/4.6.x-google
 
 OUT 		:= out
 OUT_KERNEL 	= $(OUT)/kernel
