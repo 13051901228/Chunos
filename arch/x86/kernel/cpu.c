@@ -138,9 +138,7 @@ int arch_irq_init(void)
 
 int arch_init(void)
 {
-	x86_idt_init();
 	tss_init();
-
 	return 0;
 }
 
@@ -161,5 +159,6 @@ u32 arch_build_tlb_des(unsigned long pa, u32 attr)
 
 int arch_early_init(void)
 {
+	x86_idt_init();
 	return 0;
 }

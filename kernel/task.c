@@ -30,7 +30,8 @@ static char *init_argv[MAX_ARGV + 1] = {NULL};
 static char *init_envp[MAX_ENVP + 1] = {NULL};
 
 extern int init_signal_struct(struct task_struct *task);
-extern void copy_sigreturn_code(struct task_struct *task);
+extern int arch_set_up_task_stack(
+	unsigned long stack_base, pt_regs *regs);
 
 static int init_task_struct(struct task_struct *task, unsigned long flag)
 {
@@ -150,16 +151,6 @@ int switch_task(struct task_struct *cur,
 	return 0;
 }
 
-static int task_setup_argenv(struct task_struct *task,
-		char *name, char **argv, char **envp)
-{
-	if (task_is_kernel(task))
-		return -EINVAL;
-
-	return task_mm_setup_argenv(&task->mm_struct,
-			name, argv, envp);
-}
-
 static struct task_struct *allocate_task(char *name)
 {
 	struct task_struct *task = NULL;
@@ -193,18 +184,9 @@ static inline void free_task(struct task_struct *task)
 		free_pages((void *)task);
 }
 
-static int reinit_task(struct task_struct *task, char *name)
+static inline int reinit_task(struct task_struct *task, char *name)
 {
-	int ret;
-
-	if (name)
-		strncpy(task->name, name, PROCESS_NAME_SIZE);
-
-	ret = init_mm_struct(task);
-	if (ret)
-		return ret;
-
-	return 0;
+	return init_mm_struct(task);
 }
 
 static struct task_struct *
@@ -274,7 +256,7 @@ int kthread_run(char *name, int (*fn)(void *arg), void *arg)
 {
 	pt_regs regs;
 
-	memset(&regs, 0, sizeof(pt_regs));
+	memset((char *)&regs, 0, sizeof(pt_regs));
 	init_pt_regs(&regs, (void *)fn, arg);
 
 	return do_fork(name, &regs, PROCESS_TYPE_KERNEL);
@@ -363,6 +345,78 @@ int kill_task(struct task_struct *task)
 	return 0;
 }
 
+extern int
+copy_sigreturn_code(struct task_struct *task, unsigned long base);
+
+static int
+task_setup_argv_envp(struct task_struct *task, unsigned long base)
+{
+	unsigned long str_base;
+	unsigned long *table_base;
+	int i = 0, length;
+	unsigned long limit = base + PAGE_SIZE;
+	char *name = task->name;
+	char **argv = task->argv;
+	char **envp = task->envp;
+
+	/* Copy argv */
+	table_base = (unsigned long *)base +
+		ARGV_META_TABLE_OFFSET;
+
+	/* assume all size will < 1 page */
+	str_base = base + ARGENV_META_OFFSET;
+
+	length = strlen(name);
+	memcpy((char *)str_base, name, length);
+	*table_base = str_base;
+	table_base++;
+	str_base += length;
+	str_base = align(str_base, sizeof(unsigned long));
+	while (argv[i] && (i < ARGV_MAX_NR - 1)) {
+		length = strlen(argv[i]);
+		memcpy((char *)str_base, argv[i], length);
+		if ((str_base + length) >= limit)
+			goto out;
+		*table_base = str_base;
+		table_base++;
+		str_base += length;
+		str_base = align(str_base, sizeof(unsigned long));
+		i++;
+	}
+	task->argc = i;
+
+	i = 0;
+	table_base = (unsigned long *)base + ENV_META_TABLE_OFFSET;
+	while (envp[i] && (i < ENV_MAX_NR)) {
+		length = strlen(envp[i]);
+		memcpy((char *)str_base, envp[i], length);
+		if ((str_base + length) >= limit)
+			goto out;
+		*table_base = str_base;
+		table_base++;
+		str_base += length;
+		str_base = align(str_base, sizeof(unsigned long));
+		i++;
+	}
+
+	task->argv = base + ARGV_META_TABLE_OFFSET;
+	task->envp = base + ENV_META_TABLE_OFFSET;
+
+out:
+	return 0;
+}
+
+static int task_setup_meta_data(struct task_struct *task)
+{
+	static void *callback[] = {
+		copy_sigreturn_code,
+		task_setup_argv_envp,
+		NULL,
+	};
+
+	return task_mm_setup_meta_data(task, callback);
+}
+
 int do_exec(char __user *name,
 	    char __user **argv,
 	    char __user **envp,
@@ -371,7 +425,7 @@ int do_exec(char __user *name,
 	struct task_struct *new;
 	int err = 0;
 	unsigned long flag = current->flag;
-	int arg_num;
+	int arg_num = 0;
 
 	if (current->flag & PROCESS_TYPE_KERNEL) {
 		/*
@@ -389,26 +443,34 @@ int do_exec(char __user *name,
 	} else {
 		/* need reinit the mm_struct */
 		new = current;
+		new->argv = argv;
+		new->envp = envp;
+
+		/*
+		 * before reinit it, we need copy the argv
+		 */
+		if (name)
+			strncpy(new->name, name, PROCESS_NAME_SIZE);
+
+		arg_num = task_setup_meta_data(new);
+		if (arg_num < 0)
+			arg_num = 0;
+
 		if (reinit_task(new, name))
 			goto out_err;
 
 		new->flag |= PROCESS_FLAG_USER_EXEC;
 	}
 
-	/* 
-	 * must before load_elf_image, since the memory
-	 * will be overwrited by it
-	 */
-	arg_num = task_setup_argenv(new, name, argv, envp);
-
-	copy_sigreturn_code(new);
-
 	/*
 	 * load the elf file to memory, the original process
 	 * will be coverd by new process. so if process load
 	 * failed, the process will be core dumped.
+	 *
+	 * if this function is called by kernel, we need use
+	 * temp memory to load its image
 	 */
-	err = task_mm_load_elf_image(&new->mm_struct);
+	task_mm_load_elf_image(&new->mm_struct);
 	if (err) {
 		kernel_error("Failed to load elf file to memory\n");
 		goto out_err;

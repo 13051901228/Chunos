@@ -378,7 +378,7 @@ out:
 
 int slab_init(void)
 {
-	kernel_info("Slab memory allocater init...");
+	kernel_info("Slab memory allocater init...\n");
 	memset((char *)pslab, 0, sizeof(struct slab));
 	init_list(&pslab->plist);
 	pslab->pool = slab_pool;

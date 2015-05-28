@@ -16,14 +16,13 @@
 
 #define LOG_BUFFER_SIZE		(8192)
 
-extern void uart_puts(char *buf);
+static early_printk_t console_early_printk = NULL;
 
 struct log_buffer {
 	spin_lock_t buffer_lock;
 	int head;
 	int tail;
 	int total;
-	int handle_head;
 	char buf[LOG_BUFFER_SIZE];
 };
 
@@ -35,7 +34,6 @@ int log_buffer_init(void)
 	log_buffer.head = 0;
 	log_buffer.tail = 0;
 	log_buffer.total = 0;
-	log_buffer.handle_head = 0;
 
 	return 0;
 }
@@ -168,9 +166,9 @@ static int update_log_buffer(char *buf, int printed)
 	lb->total += printed;
 
 	if (len2)
-		lb->head = lb->tail = len1;
+		lb->head = lb->tail = len2;
 	else {
-		lb->tail += len2;
+		lb->tail += len1;
 		if (lb->total > LOG_BUFFER_SIZE)
 			lb->head = lb->tail;
 	}
@@ -180,21 +178,48 @@ static int update_log_buffer(char *buf, int printed)
 
 static inline void early_printk(char *str)
 {
-	uart_puts(str);
+	if (console_early_printk)
+		console_early_printk(str);
+}
+
+void register_early_printk(early_printk_t func)
+{
+	char ch_bak[2] = {0, 0};
+
+	if (!console_early_printk)
+		console_early_printk = func;
+	else
+		return;
+
+	/*
+	 * flush unprintk log once console is registed
+	 */
+	spin_lock_irqsave(&log_buffer.buffer_lock);
+	ch_bak[0] = log_buffer.buf[log_buffer.tail];
+	log_buffer.buf[log_buffer.tail] = 0;
+	console_early_printk(log_buffer.buf);
+	console_early_printk(ch_bak);
+	log_buffer.buf[log_buffer.tail] = ch_bak[0];
+	spin_unlock_irqstore(&log_buffer.buffer_lock);
+}
+
+
+void unregister_early_printk(void)
+{
+	console_early_printk = NULL;
 }
 
 int level_printk(const char *fmt,...)
 {
 	char ch;
-	int level = LOG_LEVEL;
 	va_list arg;
 	int printed;
-	ch = *fmt;
 	char buf[1024];
 
+	ch = *fmt;
 	if (is_digit(ch)) {
-		ch = ch-'0';
-		if(ch > level)
+		ch = ch - '0';
+		if(ch > CONFIG_LOG_LEVEL)
 			return 0;
 		fmt++;
 	}
@@ -204,13 +229,12 @@ int level_printk(const char *fmt,...)
 	printed = vsprintf(buf, fmt, arg);
 	va_end(arg);
 
+	if (!tty_flush_log(buf, printed))
+		early_printk(buf);
+
 	spin_lock_irqsave(&log_buffer.buffer_lock);
 	update_log_buffer(buf, printed);
 	spin_unlock_irqstore(&log_buffer.buffer_lock);
-
-	if (!tty_flush_log(buf, printed)) {
-		early_printk(buf);
-	}
 
 	return printed;
 }

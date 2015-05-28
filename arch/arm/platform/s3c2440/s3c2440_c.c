@@ -254,21 +254,6 @@ int soc_console_early_init(int baud)
 	return 0;
 }
 
-int soc_console_late_init(int baud)
-{
-	/*
-	 * in this function we can init other module if needed
-	 * but first we need get clk_base and uart_base again
-	 * since the mmu tlb has changed,and the io memory mapped
-	 * in boot stage can not be used any longer;in this function
-	 * we can not call printk.and clk_base and uart_base must get
-	 * correct value.
-	 */
-	uart_base = request_io_mem(UART_BASE);
-
-	return 0;
-}
-
 void uart_puts(char *buf)
 {
 	while (*buf)

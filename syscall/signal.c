@@ -59,12 +59,12 @@ int signal_handler(pt_regs *regs, unsigned long user_sp)
 	return ret;
 }
 
-void copy_sigreturn_code(struct task_struct *task)
+void copy_sigreturn_code(struct task_struct *task, unsigned long base)
 {
 	char sigreturn_start[16];
 	char sigreturn_end[16];
 
-	task_mm_copy_sigreturn(&task->mm_struct, sigreturn_start,
+	memcpy((char *)base + SIGNAL_META_OFFSET, sigreturn_start,
 			sigreturn_end - sigreturn_start);
 }
 

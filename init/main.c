@@ -32,6 +32,7 @@ extern int soc_early_init(void);
 extern int arch_init(void);
 extern int log_buffer_init(void);
 extern int mmu_init(void);
+extern int pgt_init(void);
 
 extern unsigned long init_call_start;
 extern unsigned long init_call_end;
@@ -42,23 +43,22 @@ int cpu_idle(void)
 	return 0;
 }
 
-int hello(void)
+int hello(void *argv)
 {
-	printk("hello world\n");
+	while (1) {
+		printk("hello world\n");
+		sched();
+	}
 }
 
-int test(int a, int b)
+int hello1(void *argv)
 {
-	a += 10;
-	b += 20;
+	while (1) {
+		printk("hello world ########\n");
+		sched();
+	}
 }
 
-void test1(void)
-{
-	int a = 10;
-	int b =11;
-	test(a, b);
-}
 
 int main(void)
 {
@@ -70,23 +70,15 @@ int main(void)
 	 * this function can let us use printk before 
 	 * kernel mmu page table build
 	 */
-	test1();
 	disable_irqs();
-	arch_early_init();
 	log_buffer_init();
-	console_early_init();
+	arch_early_init();
 	soc_early_init();
-
-	/*
-	 * after kernel mmu talbe build,we need init the
-	 * console again to use the uart0,or we can implement
-	 * a more stronger printk system if needed.
-	 */
 	mmu_init();
+	early_console_init();
 	mm_init();
-	console_late_init();
 	slab_init();
-
+	pgt_init();
 	arch_init();
 	soc_clock_init();
 	irq_init();
@@ -108,13 +100,15 @@ int main(void)
 	mount_init();
 
 	/* now we can enable irq */
+	//early_console_deinit();
 	enable_irqs();
 	__asm("int $20");
 
 	kthread_run("system_killer", system_killer, NULL);
-	//kthread_run("hello", hello, NULL);
+	kthread_run("hello", hello, NULL);
+	kthread_run("hello1", hello1, NULL);
 
-	//init_task();
+	init_task();
 
 	for (;;) {
 		cpu_idle();

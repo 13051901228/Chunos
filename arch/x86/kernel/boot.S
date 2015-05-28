@@ -201,35 +201,10 @@ set_boot_pde_2:
 	add	%ecx, %eax
 4:
 	cmp	$0, %edx
-	jbe	set_uart_pde
-
-	mov	%ebx, %esi
-	or	$(PDE_PS | PDE_RW | PDE_P), %esi
-
-	mov	%esi, (%eax)
-	add	$4, %eax
-	sub	$4, %edx
-	add	$0x400000, %ebx
-	jmp	4b
-
-set_uart_pde:
-	mov	$KERNEL_PDE_BASE, %eax
-	va2pa	%eax
-	mov	$0xe1100000, %ebx
-	mov	%ebx, %ecx
-	mov	$0x4, %edx
-
-	and	$(0xffc00000), %ebx
-	and	$(0xffc00000), %ecx
-	shr	$(22), %ecx
-	shl	$(2), %ecx
-	add	%ecx, %eax
-4:
-	cmp	$0, %edx
 	jbe	clean_gdt_table
 
 	mov	%ebx, %esi
-	or	$(PDE_PS | PDE_RW | PDE_P | PDE_PCD), %esi
+	or	$(PDE_PS | PDE_RW | PDE_P), %esi
 
 	mov	%esi, (%eax)
 	add	$4, %eax

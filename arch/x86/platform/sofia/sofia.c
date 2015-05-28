@@ -10,15 +10,14 @@
 #include <os/init.h>
 #include <os/irq.h>
 
-int soc_console_early_init(u32 baud)
+int __init_text soc_console_early_init(unsigned long base, u32 baud)
 {
-	sofia_init_uart_usif(baud);
-	return 0;
+	return sofia_init_uart_usif(base, baud);
 }
 
-int soc_console_late_init(u32 baud)
+void __init_text soc_early_console_deinit(void)
 {
-	return 0;
+	return sofia_deinit_uart_usif();
 }
 
 u32 sofia_clk_init(void)

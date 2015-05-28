@@ -15,6 +15,7 @@
 #include <os/file.h>
 #include <os/memory_map.h>
 #include <os/mirros.h>
+#include <os/sched.h>
 
 static void free_sections_memory(struct mm_struct *mm)
 {
@@ -39,28 +40,31 @@ static void init_task_mm_section(struct mm_struct *mm, int i)
 	struct task_mm_section *section;
 
 	section = &mm->mm_section[i];
-	section->flag = i;
 
 	switch (i) {
 	case TASK_MM_SECTION_RO:
 		section->section_size =
 			elf_memory_size(mm->elf_file);
 		section->base_addr = elf_get_elf_base(mm->elf_file);
+		section->flag |= TASK_MM_SECTION_FLAG_RO;
 		break;
 
 	case TASK_MM_SECTION_STACK:
 		section->section_size = SIZE_NM(1);
 		section->base_addr = PROCESS_USER_STACK_BASE;
+		section->flag |= TASK_MM_SECTION_FLAG_STACK;
 		break;
 
 	case TASK_MM_SECTION_MMAP:
 		section->section_size = SIZE_NM(512);
 		section->base_addr = PROCESS_USER_MMAP_BASE;
+		section->flag |= TASK_MM_SECTION_FLAG_MMAP;
 		break;
 
 	case TASK_MM_SECTION_META:
 		section->section_size = SIZE_NK(16);
 		section->base_addr = PROCESS_USER_META_BASE;
+		section->flag |= TASK_MM_SECTION_FLAG_META;
 		break;
 
 	default:
@@ -74,7 +78,7 @@ static void init_task_mm_section(struct mm_struct *mm, int i)
 	 * alloc_mem
 	 */
 	section->mapped_size = 0;
-	section->flag |= i;
+	init_list(&section->alloc_mem);
 }
 
 static void copy_mm_section_info(struct mm_struct *c,
@@ -105,7 +109,7 @@ static int section_get_memory(int count,
 	if (count == 0)
 		return -EINVAL;
 
-	if (section->flag & TASK_MM_SECTION_MMAP)
+	if (section->flag & TASK_MM_SECTION_FLAG_MMAP)
 		flag = GFP_MMAP;
 	else
 		flag = GFP_USER;
@@ -164,6 +168,10 @@ int task_mm_load_elf_image(struct mm_struct *mm)
 		&mm->mm_section[TASK_MM_SECTION_RO];
 	size_t load_size;
 	int page_nr, ret;
+	struct list_head *list = &section->alloc_mem;
+	struct pgt_map_info map_info = { 0 };
+	unsigned long base, offset = 0;
+	struct task_page_table *ctable = &current->mm_struct.page_table;
 
 	/* 
 	 * here we load the all size, later will consider
@@ -187,12 +195,29 @@ int task_mm_load_elf_image(struct mm_struct *mm)
 	if (ret)
 		return ret;
 
-	ret = elf_load_elf_image(mm->elf_file,
-			section->base_addr, load_size);
-	if (ret)
-		return ret;
+	if (mm != &current->mm_struct) {
+		page_nr = page_nr(load_size);
+		map_info.mlist = list_next(list);
+		map_info.alloc_nr = page_nr;
+		request_pgt_temp_memory(ctable, &map_info);
 
-	return 0;
+		while (page_nr) {
+			map_info.request_nr = page_nr;
+			base = pgt_map_temp_memory(ctable, &map_info);
+			elf_load_elf_image(mm->elf_file, base,
+					map_info.request_nr << PAGE_SHIFT, offset);
+			offset += map_info.request_nr << PAGE_SHIFT;
+			page_nr -= map_info.request_nr;
+		}
+
+		free_pgt_temp_memory(ctable);
+	} else {
+		ret = elf_load_elf_image(mm->elf_file,
+				section->base_addr,
+				load_size, 0);
+	}
+
+	return ret;
 }
 
 static int copy_section_memory(struct task_mm_section *new,
@@ -201,16 +226,22 @@ static int copy_section_memory(struct task_mm_section *new,
 	int nr = 0;
 	int count = new->alloc_pages;
 	unsigned long pbase = parent->base_addr;
-	unsigned long nbase = KERNEL_TEMP_BUFFER_BASE;
-	struct list_head *list = list_next(&new->alloc_mem);
+	unsigned long nbase;
+	struct pgt_map_info map_info = { 0 };
+	struct task_page_table *page_table = &current->mm_struct.page_table;
+
+	map_info.type = PGT_MAP_MMAP;
+	map_info.alloc_nr = count;
+	map_info.mlist = list_next(&new->alloc_mem);
+	request_pgt_temp_memory(page_table, &map_info);
 
 	if (new->alloc_pages != parent->alloc_pages)
 		return -EINVAL;
 
 	while (count) {
-		list = pgt_map_temp_memory(list,
-				&count, &nr, type);
-		if (!list)
+		map_info.request_nr = count;
+		nbase = pgt_map_temp_memory(page_table, &map_info);
+		if (nbase)
 			return -EFAULT;
 
 		memcpy((char *)nbase, (char *)pbase,
@@ -219,7 +250,8 @@ static int copy_section_memory(struct task_mm_section *new,
 			pbase += (nr << PAGE_SHIFT);
 		else
 			pbase -= (nr >> PAGE_SHIFT);
-		count -= nr;
+
+		count -= map_info.request_nr;
 	}
 
 	return 0;
@@ -285,9 +317,11 @@ static int copy_task_mmap(struct mm_struct *new,
 		&new->mm_section[TASK_MM_SECTION_MMAP];
 	struct task_mm_section *p =
 		&parent->mm_section[TASK_MM_SECTION_MMAP];
-	struct list_head *nl, *list, *pl, *temp;
+	struct list_head *list, *nl, *pl;
 	struct page *np, *pp;
 	int ret;
+	struct pgt_map_info map_info = { 0 };
+	unsigned long base;
 
 	if (n->alloc_pages != p->alloc_pages)
 		return -EINVAL;
@@ -295,8 +329,17 @@ static int copy_task_mmap(struct mm_struct *new,
 	nl = &n->alloc_mem;
 	pl = &p->alloc_mem;
 
+	map_info.type = PGT_MAP_MMAP;
+	map_info.alloc_nr = 1;
+	map_info.mlist = list_next(nl);
+	request_pgt_temp_memory(&parent->page_table, &map_info);
+
+	/*
+	 * one page when map temp memroy
+	 */
+	map_info.request_nr = 1;
+
 	list_for_each(pl, list) {
-		nl = list_next(nl);
 		np = list_to_page(nl);
 		pp = list_to_page(pl);
 		
@@ -305,14 +348,14 @@ static int copy_task_mmap(struct mm_struct *new,
 		if (ret)
 			return ret;
 
-		temp = pgt_map_temp_memory(list, NULL,
-				NULL, PGT_MAP_MMAP);
-		if (!temp)
+		base = pgt_map_temp_memory(&parent->page_table, &map_info);
+		if (!base)
 			return -EFAULT;
 
-		memcpy((char *)KERNEL_TEMP_BUFFER_BASE,
-			(char *)page_to_va(pp), PAGE_SIZE);
+		memcpy((char *)base, (char *)page_to_va(pp), PAGE_SIZE);
 	}
+
+	free_pgt_temp_memory(&new->page_table);
 
 	return 0;
 }
@@ -369,95 +412,44 @@ err:
 	return -ENOMEM;
 }
 
-/*
- * below marco define the meta data struct
- * now the max length of meta area is 4k
- * should be increase later
- */
-#define SIGNAL_META_OFFSET	(0)
-#define SIGNAL_META_SIZE	(256)
 
-#define ARGV_META_TABLE_OFFSET	\
-	(SIGNAL_META_OFFSET + SIGNAL_META_SIZE)
-#define ARGV_MAX_NR		(32)
-#define ARGV_META_TABLE_SIZE	(ARGV_MAX_NR * sizeof(unsigned long))
-
-#define ENV_META_TABLE_OFFSET	\
-	(ARGV_META_TABLE_OFFSET + ARGV_META_TABLE_SIZE)
-#define ENV_MAX_NR		(32)
-#define ENV_META_TABLE_SIZE	(ENV_MAX_NR * sizeof(unsigned long))
-
-#define ARGENV_META_OFFSET	\
-	(ENV_META_TABLE_OFFSET + ENV_META_TABLE_SIZE)
-
-int task_mm_setup_argenv(struct mm_struct *mm,
-		char *name, char **argv, char **envp)
+int task_mm_setup_meta_data(struct mm_struct *mm, void *callback[])
 {
+	int i;
+	struct task_struct *task = container_of(mm,
+		struct task_struct, mm_struct);
 	struct task_mm_section *section =
 		&mm->mm_section[TASK_MM_SECTION_META];
-	unsigned long str_base;
-	unsigned long *table_base;
-	int i = 0, length;
-	unsigned long limit =
-		section->base_addr + section->mapped_size;
+	unsigned long base;
+	struct pgt_map_info map_info = { 0 };
+	struct task_page_table *ctable =
+		&current->mm_struct.page_table;
+	meta_data_func func;
 
-	/* assume all size will < 1 page */
-
-	str_base = section->base_addr + ARGENV_META_OFFSET;
-	
-	/* Copy argv */
-	table_base = (unsigned long *)
-		section->base_addr + ARGV_META_TABLE_OFFSET;
-
-	length = strlen(name);
-	memcpy((char *)str_base, name, length);
-	*table_base = str_base;
-	table_base++;
-	str_base += length;
-	str_base = align(str_base, sizeof(unsigned long));
-	while (argv[i] && (i < ARGV_MAX_NR - 1)) {
-		length = strlen(argv[i]);
-		memcpy((char *)str_base, argv[i], length);
-		if ((str_base + length) >= limit)
-			goto out;
-		*table_base = str_base;
-		table_base++;
-		str_base += length;
-		str_base = align(str_base, sizeof(unsigned long));
-		i++;
+	if (&current->mm_struct != mm) {
+		map_info.alloc_nr = 1;
+		map_info.type = PGT_MAP_NORMAL;
+		map_info.mlist = list_next(&section->alloc_mem);
+		map_info.request_nr = 1;
+		request_pgt_temp_memory(ctable, &map_info);
+		base = pgt_map_temp_memory(ctable, &map_info);
+		if (!base)
+			return -ENOMEM;
+	} else {
+		base = section->base_addr;
 	}
 
-	i = 0;
-	table_base = (unsigned long *)
-		section->base_addr + ENV_META_TABLE_OFFSET;
-	while (envp[i] && (i < ENV_MAX_NR)) {
-		length = strlen(envp[i]);
-		memcpy((char *)str_base, envp[i], length);
-		if ((str_base + length) >= limit)
-			goto out;
-		*table_base = str_base;
-		table_base++;
-		str_base += length;
-		str_base = align(str_base, sizeof(unsigned long));
-		i++;
+	for (i = 0; ; i++) {
+		func = (meta_data_func)callback[i];
+		if (!func)
+			break;
+
+		func(task, base);
 	}
 
-out:
-	return 0;
-}
+	if (&current->mm_struct != mm)
+		free_pgt_temp_memory(&current->mm_struct.page_table);
 
-int task_mm_copy_sigreturn(struct mm_struct *mm,
-		char *start, int size)
-{
-	struct task_mm_section *section =
-		&mm->mm_section[TASK_MM_SECTION_META];
-	unsigned long load_base =
-		section->base_addr + SIGNAL_META_OFFSET;
-
-	if (!start || !size)
-		return -EINVAL;
-
-	memcpy((char *)load_base, start, size);
 	return 0;
 }
 
@@ -469,13 +461,17 @@ static int init_task_meta_section(struct mm_struct *mm)
 	if (!section->alloc_pages) {
 		if (section_get_memory(1, section))
 			return -ENOMEM;
-	}
 
-	if (pgt_map_task_memory(&mm->page_table,
+		/*
+		 * if task is execed by user space
+		 * can skip to init it again
+		 */
+		if (pgt_map_task_memory(&mm->page_table,
 				&section->alloc_mem,
 				section->base_addr,
 				PGT_MAP_NORMAL))
-		return -EFAULT;
+			return -EFAULT;
+	}
 
 	return 0;
 }
@@ -605,9 +601,9 @@ int init_mm_struct(struct task_struct *task)
 	 * the information from the parent task.
 	 */
 	for (i = 0; i < TASK_MM_SECTION_MAX; i++) {
-		if (task->flag & PROCESS_FLAG_USER_EXEC) {
+		if (task->flag & _PROCESS_FLAG_USER_EXEC) {
 			init_task_mm_section(mm, i);
-		} else if (task->flag & PROCESS_FLAG_KERN_EXEC) {
+		} else if (task->flag & _PROCESS_FLAG_KERN_EXEC) {
 			init_task_mm_section(mm, i);
 		} else {
 			copy_mm_section_info(mm, mmp, i);

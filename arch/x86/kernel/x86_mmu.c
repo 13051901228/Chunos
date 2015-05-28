@@ -87,9 +87,9 @@ static inline unsigned long x86_pte_to_pa(unsigned long pte)
 	return (*(unsigned long *)pte) & (0xffffff00);
 }
 
-static inline void x86_invalid_tlb(void)
+static inline void x86_invalid_tlb(unsigned long addr)
 {
-
+	asm volatile("invlpg (%0)" ::"r" (addr): "memory");
 }
 
 struct mmu_ops x86_mmu_ops = {
@@ -104,6 +104,6 @@ struct mmu_ops x86_mmu_ops = {
 };
 
 struct mmu x86_mmu = {
-	.kernel_tlb_base	= KERNEL_PDE_BASE,
+	.kernel_pde_base	= KERNEL_PDE_BASE,
 	.mmu_ops		= &x86_mmu_ops,
 };

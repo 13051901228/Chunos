@@ -159,14 +159,14 @@ static void __init_text soc_get_mem_info(struct soc *soc)
 		soc->board.parse_memory_info();
 }
 
-void __init_text console_late_init(void)
+void __init_text early_console_deinit(void)
 {
-	soc_console_late_init(115200);
+	soc_early_console_deinit();
 }
 
-void __init_text console_early_init(void)
+void __init_text early_console_init(void)
 {
-	soc_console_early_init(115200);
+	soc_console_early_init(CONFIG_EARLY_CONSOLE_BASE, 115200);
 }
 
 int __init_text soc_early_init(void)

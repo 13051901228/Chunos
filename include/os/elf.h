@@ -159,7 +159,7 @@ struct elf_file *get_elf_info(struct file *file);
 size_t elf_memory_size(struct elf_file *efile);
 
 int elf_load_elf_image(struct elf_file *efile,
-		unsigned long tar, size_t size);
+		unsigned long tar, size_t size, offset_t off);
 
 void inline release_elf_file(struct elf_file *efile);
 

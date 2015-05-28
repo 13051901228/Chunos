@@ -21,8 +21,29 @@
  */
 #define PROCESS_USER_ELF_UNUSED_SIZE	(4 * 1024 * 1024)
 #define PROCESS_USER_META_BASE		(PROCESS_USER_BASE + PROCESS_USER_ELF_UNUSED_SIZE)
-#define PROCESS_USER_META_SIZE		(16 * 1024)
+#define PROCESS_USER_META_SIZE		(4 * 1024)
 #define PROCESS_SIGRETURN_OFFSET	(3000)
 #define PROCESS_USER_EXEC_BASE		(0x00404000)
+
+/*
+ * below marco define the meta data struct
+ * now the max length of meta area is 4k
+ * should be increase later
+ */
+#define SIGNAL_META_OFFSET	(0)
+#define SIGNAL_META_SIZE	(256)
+
+#define ARGV_META_TABLE_OFFSET	\
+	(SIGNAL_META_OFFSET + SIGNAL_META_SIZE)
+#define ARGV_MAX_NR		(32)
+#define ARGV_META_TABLE_SIZE	(ARGV_MAX_NR * sizeof(unsigned long))
+
+#define ENV_META_TABLE_OFFSET	\
+	(ARGV_META_TABLE_OFFSET + ARGV_META_TABLE_SIZE)
+#define ENV_MAX_NR		(32)
+#define ENV_META_TABLE_SIZE	(ENV_MAX_NR * sizeof(unsigned long))
+
+#define ARGENV_META_OFFSET	\
+	(ENV_META_TABLE_OFFSET + ENV_META_TABLE_SIZE)
 
 #endif

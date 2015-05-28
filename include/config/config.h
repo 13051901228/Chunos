@@ -1,7 +1,7 @@
 #ifndef _CONFIG_H
 #define _CONFIG_H
 
-#define LOG_LEVEL			3
+#define CONFIG_LOG_LEVEL		3
 
 #define HZ				100
 
@@ -22,5 +22,7 @@
 
 #define CONFIG_HAS_ARCH_MEMSET
 #define CONFIG_HAS_ARCH_MEMCPY
+
+#define CONFIG_EARLY_CONSOLE_BASE	(0x40000000)
 
 #endif

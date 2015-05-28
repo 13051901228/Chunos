@@ -8,10 +8,10 @@
 #include <os/file.h>
 
 int elf_load_elf_image(struct elf_file *efile,
-		unsigned long tar, size_t size)
+		unsigned long tar, size_t size, offset_t off)
 {
 	struct elf_section *section;
-	offset_t offset = 0;
+	offset_t offset_td, offset_bss;
 	size_t load_size;
 	size_t ret;
 	unsigned long rodata_base = 0;
@@ -24,37 +24,35 @@ int elf_load_elf_image(struct elf_file *efile,
 	if (!is_align(tar, PAGE_SIZE) || !efile->file)
 		return -EINVAL;
 
-	if ((tar <= efile->elf_base))
+	if (off > efile->elf_size)
 		return -EINVAL;
 
 	section = &efile->sections[SECTION_TEXT_DATA];
-	if ((tar >= section->load_addr) &&
-	     (tar < section->load_addr + section->size)) {
+	if (off < section->size) {
 		rodata_base = tar;
-		load_size = section->load_addr +
-			    section->size - tar;
+		load_size = section->size - off;
 		rodata_size = MIN(load_size, size);
 		tar += rodata_size;
 		size -= rodata_size;
+		offset_td = off;
+		off += rodata_size;
 	}
 
 	section = &efile->sections[SECTION_BSS];
-	if ((tar >= section->load_addr) &&
-	     (tar < section->load_addr + section->size)) {
+	if (size) {
 		bss_base = tar;
-		load_size = section->load_addr +
-			    section->size - tar;
+		load_size = section->size - off;
 		bss_size = MIN(load_size, size);
 		tar += bss_size;
 		size -= bss_size;
+		offset_bss = off;
 	}
 
 	if (size != 0)
-		kernel_warning("elf size may not correct\n");
+		kernel_warning("Elf size may not correct\n");
 
 	if (rodata_size) {
-		offset = rodata_base - efile->elf_base;
-		ret = kernel_seek(efile->file, offset, SEEK_SET);
+		ret = kernel_seek(efile->file, offset_td, SEEK_SET);
 		if (ret)
 			return -ENOENT;
 
@@ -117,22 +115,20 @@ static struct elf_file *parse_elf_info(elf_section_header *header,
 			name = &str[tmp->sh_name];
 			if (strncmp(name, "bss", 3)) {
 				/* can be optimized TBD */
-				if (!section_roda->offset) {
-					section_roda->offset = header->sh_offset;
-				}
+				if (!section_roda->offset)
+					section_roda->offset = tmp->sh_offset;
 
-				if (!section_roda->load_addr) {
-					section_roda->load_addr = header->sh_addr;
-				}
+				if (!section_roda->load_addr)
+					section_roda->load_addr = tmp->sh_addr;
 
-				section_roda->size += header->sh_size;
+				section_roda->size += tmp->sh_size;
 			} else {
-				section_bss->offset = header->sh_offset;
-				section_bss->load_addr = header->sh_addr;
-				section_bss->size = header->sh_size;
+				section_bss->offset = tmp->sh_offset;
+				section_bss->load_addr = tmp->sh_addr;
+				section_bss->size = tmp->sh_size;
 			}
 
-			size += header->sh_size;
+			size += tmp->sh_size;
 		}
 
 		tmp++;
@@ -159,7 +155,7 @@ size_t inline elf_memory_size(struct elf_file *efile)
 
 unsigned long inline elf_get_elf_base(struct elf_file *efile)
 {
-	return 0;
+	return efile->elf_base;
 }
 
 struct elf_file *get_elf_info(struct file *file)
@@ -230,10 +226,8 @@ struct elf_file *get_elf_info(struct file *file)
 	}
 
 	elf_file = parse_elf_info(header, hdr.e_shnum, str);
-	if (elf_file != NULL) {
-		release_elf_file(elf_file);
-		elf_file =NULL;
-	}
+	if (elf_file == NULL)
+		goto go_out;
 
 	elf_file->entry_point_address = hdr.e_entry;
 

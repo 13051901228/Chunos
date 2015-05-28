@@ -6,7 +6,7 @@
 #include <os/io.h>
 
 /* boot uart device use usif 1 */
-static unsigned long usif1_base = 0xe1100000;
+static unsigned long usif1_base;
 
 #define USIF_CLC		0x0
 #define USIF_CLC_CNT		0x4
@@ -60,8 +60,37 @@ static unsigned long usif1_base = 0xe1100000;
 #define USIF_TXD		0x40000
 #define USIF_RXD		0x80000
 
-int sofia_init_uart_usif(u32 baud)
+static inline void early_xgold_usif_putc(char s)
 {
+	while ((ioread32(USIF_FIFO_STAT + usif1_base) & 0xff0000 ) >> 0x10);
+
+	iowrite32(1, USIF_FIFO_CTRL + usif1_base);
+	iowrite32(s, USIF_TXD + usif1_base);
+}
+
+void xgold_uart_puts(char *str)
+{
+	int i;
+	unsigned long flag;
+
+	enter_critical(&flag);
+
+	for (i = 0; *str; i++) {
+		if (*str == '\n')
+			early_xgold_usif_putc('\r');
+		early_xgold_usif_putc(*str);
+		str++;
+	}
+
+	exit_critical(&flag);
+}
+
+int __init_text sofia_init_uart_usif(unsigned long base, u32 baud)
+{
+	usif1_base = iomap_to_addr(0xe1100000, base);
+	if (!usif1_base)
+		return -ENOMEM;
+
 	iowrite32(0x00000aa6, usif1_base + USIF_CLC);
 	iowrite32(0x00000001, usif1_base + USIF_CLC_CNT);
 	iowrite32(0x10806, usif1_base + USIF_MODE_CFG);
@@ -86,30 +115,13 @@ int sofia_init_uart_usif(u32 baud)
 	/* enable rx interrupt */
 	/* iowrite32(0xa, usif1_base + USIF_IMSC); */
 #endif
+	register_early_printk(xgold_uart_puts);
+
 	return 0;
 }
 
-static inline void early_xgold_usif_putc(char s)
+void __init_text sofia_deinit_uart_usif(void)
 {
-	while ((ioread32(USIF_FIFO_STAT + usif1_base) & 0xff0000 ) >> 0x10);
-
-	iowrite32(1, USIF_FIFO_CTRL + usif1_base);
-	iowrite32(s, USIF_TXD + usif1_base);
-}
-
-void uart_puts(char *str)
-{
-	int i;
-	unsigned long flag;
-
-	enter_critical(&flag);
-
-	for (i = 0; *str; i++) {
-		if (*str == '\n')
-			early_xgold_usif_putc('\r');
-		early_xgold_usif_putc(*str);
-		str++;
-	}
-
-	exit_critical(&flag);
+	iounmap(usif1_base);
+	unregister_early_printk();
 }

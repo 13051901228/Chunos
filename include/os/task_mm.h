@@ -27,6 +27,11 @@ typedef enum _task_mm_section_t {
 	TASK_MM_SECTION_MAX
 } task_mm_section_t;
 
+#define TASK_MM_SECTION_FLAG_RO		(0x00000001)
+#define TASK_MM_SECTION_FLAG_STACK	(0x00000002)
+#define TASK_MM_SECTION_FLAG_MMAP	(0x00000004)
+#define TASK_MM_SECTION_FLAG_META	(0x00000008)
+
 /*
  * user_base_addr: base address of this section in user space
  * section_size: section size of this section.
@@ -56,7 +61,6 @@ struct task_mm_section {
  */
 struct mm_struct {
 	struct elf_file *elf_file;
-	struct file *file;
 	struct task_page_table page_table;
 	struct task_mm_section mm_section[TASK_MM_SECTION_MAX];
 };

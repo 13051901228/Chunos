@@ -25,6 +25,13 @@ struct pte_cache_list {
 	struct list_head *pte_current_page;
 };
 
+struct pgt_temp_buffer {
+	unsigned long tbuf_pte_base;
+	struct page *tbuf_pte_page;
+	struct mutex tbuf_mutex;
+	int tbuf_page_nr;
+};
+
 /*
  * lvl1_pgt_base: the level 1 pgt base address
  * lvl2_pgt_list: the memory for lvl2 page table
@@ -35,22 +42,25 @@ struct pte_cache_list {
 struct task_page_table {
 	unsigned long pde_base;
 	unsigned long pde_base_pa;
-
 	struct pte_cache_list task_list;
 	struct pte_cache_list mmap_list;
-
-	unsigned long temp_buffer_base;
-	int temp_buffer_nr;
-
 	unsigned long mmap_current_base;
+	struct pgt_temp_buffer pgt_temp_buffer;
+};
+
+struct pgt_map_info {
+	struct list_head *mlist;
+	int request_nr;
+	int alloc_nr;
+	int type;
 };
 
 void free_task_page_table(struct task_page_table *pgt);
 
 int init_task_page_table(struct task_page_table *table);
 
-struct list_head *pgt_map_temp_memory(struct list_head *head,
-		int *count, int *nr, int type);
+unsigned long pgt_map_temp_memory(struct task_page_table *table,
+		struct pgt_map_info *info);
 
 int pgt_map_task_page(struct task_page_table *table,
 		struct page *page, unsigned long user_addr);
@@ -61,5 +71,11 @@ int pgt_map_task_memory(struct task_page_table *table,
 
 int pgt_map_mmap_page(struct task_page_table *table,
 		struct page *page, unsigned long user_addr);
+
+int request_pgt_temp_memory(struct task_page_table *table,
+		struct pgt_map_info *map_info);
+
+
+void free_pgt_temp_memory(struct task_page_table *table);
 
 #endif

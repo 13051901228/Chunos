@@ -103,8 +103,14 @@ struct task_struct {
 	struct list_head mutex_get;
 	struct mutex mutex;
 
+	char **argv;
+	char *envp;
+	int argc;
+
 	void *message;
 };
+
+typedef int (*meta_data_func)(struct task_struct *task, unsigned long base);
 
 extern pt_regs *arch_get_pt_regs(void);
 

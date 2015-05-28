@@ -54,7 +54,7 @@ typedef u8			bool;
 
 #define NULL ((void *)0)
 
-#define container_of(ptr,name,member) \
+#define container_of(ptr, name, member) \
 	(name *)((unsigned char *)ptr - ((unsigned char *)&(((name *)0)->member)))
 
 #define bit(nr) (1 << (nr))

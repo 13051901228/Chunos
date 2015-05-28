@@ -6,21 +6,30 @@
 
 .global arch_enter_critical
 arch_enter_critical:
+	push %eax
+	push %ebx
 	pushf
 	pop 	%ebx
+	mov	12(%esp), %eax
 	mov 	%ebx, (%eax)
+	pop	%ebx
+	pop	%eax
 	cli
 	ret
 
 .global arch_exit_critical
 arch_exit_critical:
+	push	%eax
+	mov	8(%esp), %eax
 	mov 	(%eax), %eax
 	and 	$0x200, %eax
 	cmp 	$0x200, %eax
 	je 	__ret_enable_irq
+	pop	%eax
 	ret
 
 __ret_enable_irq:
+	pop %eax
 	sti
 	ret
 

@@ -154,6 +154,10 @@ static inline void outsl(unsigned long addr, const void *buffer, int count)
 #define iowrite16_rep(p, src, count)	outsw((unsigned long)(p), (src), (count))
 #define iowrite32_rep(p, src, count)	outsl((unsigned long)(p), (src), (count))
 
-void *request_io_mem(unsigned long addr);
+unsigned long iomap_to_addr(unsigned long io_phy, unsigned long vir);
+
+unsigned long iomap(unsigned long io_phy);
+
+int iounmap(unsigned long vir);
 
 #endif

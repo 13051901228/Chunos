@@ -121,12 +121,10 @@ void soc_clock_init(void);
 
 int timer_tick_init(void);
 
-void console_early_init(void);
-
 int soc_early_init(void);
 
-void console_late_init(void);
+void early_console_init(void);
 
-void console_early_init(void);
+void early_console_deinit(void);
 
 #endif

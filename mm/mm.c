@@ -298,12 +298,12 @@ static int do_map_kernel_memory(void)
 		for (j = 0; j < zone->nr_section; j++) {
 			unsigned long start, end;
 
-			start = section->vir_start;
-			end = section->vir_start + section->size;
-
 			section = &zone->memory_section[j];
 			if (!section->maped_size)
 				continue;
+
+			start = section->vir_start;
+			end = section->vir_start + section->size;
 
 			if ((KERNEL_VIRTUAL_BASE >= start) &&
 					(KERNEL_VIRTUAL_BASE < end)) {

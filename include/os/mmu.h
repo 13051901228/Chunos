@@ -4,6 +4,7 @@
 #include <os/mm.h>
 #include <os/types.h>
 #include <asm/cpu.h>
+#include <asm/pde.h>
 
 #define PAGE_MAP_SIZE	(PAGE_SIZE/sizeof(u32) * PAGE_SIZE)
 
@@ -21,6 +22,8 @@
 #define PDE_ALIGN_SIZE			ARCH_PDE_ALIGN_SIZE
 #define PDE_ALIGN(addr)			ARCH_PDE_ALIGN(addr)
 #define PDE_MIN_ALIGN(addr)		ARCH_PDE_MIN_ALIGN(addr)
+
+#define PDE_TABLE_SIZE			ARCH_PDE_TABLE_SIZE
 
 struct mmu_ops {
 	void (*build_pde_entry)(unsigned long pde_base,
@@ -40,11 +43,11 @@ struct mmu_ops {
 
 	unsigned long (*pte_to_pa)(unsigned long pte);
 
-	void (*invalid_tlb)(void);
+	void (*invalid_tlb)(unsigned long addr);
 };
 
 struct mmu {
-	unsigned long kernel_tlb_base;
+	unsigned long kernel_pde_base;
 	struct mmu_ops *mmu_ops;
 };
 
@@ -58,7 +61,7 @@ static inline void flush_cache(void)
 	arch_flush_cache();
 }
 
-int build_kernel_pde_entry(unsigned long vstart,
+unsigned long build_kernel_pde_entry(unsigned long vstart,
 			  unsigned long pstart,
 			  size_t size, u32 flag);
 
