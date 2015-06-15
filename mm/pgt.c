@@ -61,6 +61,7 @@ static struct page *alloc_new_pde(void)
 	} else {
 		page = list_to_page(list_next(&pgt_buffer.list));
 		list_del(list_next(&pgt_buffer.list));
+		pgt_buffer.nr_free--;
 	}
 
 	spin_unlock_irqstore(&pgt_buffer.pgt_lock);
@@ -209,7 +210,7 @@ pgt_map_new_pde_entry(struct pte_cache_list *clist,
 	 * pde entry
 	 */
 	for (i = 0; i < PTE_TABLE_PER_PAGE; i++) {
-		mmu_create_pde_entry(pde, pte_free_base);
+		mmu_create_pde_entry(pde, pte_free_base, user_base);
 		pde += PDE_ENTRY_SIZE;
 		pte_free_base += PTE_TABLE_SIZE;
 		user_base += PDE_MAP_SIZE;
@@ -252,72 +253,29 @@ static int __pgt_map_page(struct task_page_table *table,
 		return -ENOMEM;
 
 
-	mmu_create_pte_entry(pte_addr, page_to_pa(page));
+	mmu_create_pte_entry(pte_addr, page_to_pa(page), user_addr);
 	page_set_map_address(page, user_addr);
 
 	return 0;
 
 }
 
-unsigned long pgt_map_temp_memory(struct task_page_table *table,
-		struct pgt_map_info *map_info)
+/* temp implement TBD */
+unsigned long
+pgt_map_temp_page(struct task_page_table *table, struct page *page)
 {
 	unsigned long pte_base =
 		table->pgt_temp_buffer.tbuf_pte_base;
-	struct list_head *list = map_info->mlist;
-	struct page *page;
-	int offset_pte, i;
 
-	if (map_info->request_nr > map_info->alloc_nr)
-		map_info->request_nr = map_info->alloc_nr;
-
-	if (!map_info->type) {
-		pte_base += (map_info->request_nr * sizeof(unsigned long));
-		offset_pte = 0 - sizeof(unsigned long);
-	} else {
-		offset_pte = sizeof(unsigned long);
-	}
-
-	for (i = 0; i < map_info->request_nr; i++) {
-		page = list_to_page(list);
-		mmu_create_pte_entry(pte_base, page_to_pa(page));
-		pte_base += offset_pte;
-		list = list_next(list);
-	}
-
-	/*
-	 * update the list head for next useage
-	 */
-	map_info->mlist = list;
+	mmu_create_pte_entry(pte_base, page_to_pa(page),
+			KERNEL_TEMP_BUFFER_BASE);
 
 	return KERNEL_TEMP_BUFFER_BASE;
 }
 
-int request_pgt_temp_memory(struct task_page_table *table,
-		struct pgt_map_info *map_info)
+int pgt_unmap_temp_page(struct task_page_table *table, unsigned long base)
 {
-	struct pgt_temp_buffer *tb = &table->pgt_temp_buffer;
-
-	if (!map_info->request_nr)
-		return -EINVAL;
-
-	mutex_lock(&tb->tbuf_mutex);
-
-	if (tb->tbuf_page_nr < map_info->alloc_nr)
-		map_info->alloc_nr = tb->tbuf_page_nr;
-
-	if (map_info->type == PGT_MAP_STACK)
-		map_info->type = MEM_TYPE_GROW_DOWN;
-	else
-		map_info->type = MEM_TYPE_GROW_UP;
-
-
 	return 0;
-}
-
-void free_pgt_temp_memory(struct task_page_table *table)
-{
-	mutex_unlock(&table->pgt_temp_buffer.tbuf_mutex);
 }
 
 static int
@@ -349,7 +307,7 @@ __pgt_map_task_memory(struct task_page_table *table,
 		}
 
 		page = list_to_page(list);
-		mmu_create_pte_entry(pte, page_to_pa(page));
+		mmu_create_pte_entry(pte, page_to_pa(page), base);
 		page_set_map_address(page, base);
 		base += offset;
 
@@ -423,18 +381,19 @@ int init_task_page_table(struct task_page_table *table)
 	 * if do memset op here, it will cause much time
 	 * to be fix
 	 */
-	memset((void *)table->pde_base,
-			0, PDE_TABLE_SIZE);
 	mmu_copy_kernel_pde(table->pde_base);
 	init_pte(table);
 
 	/*
 	 * init temp_buffer member
 	 */
-	init_mutex(&tb->tbuf_mutex);
+
 	base = pgt_get_pde_entry_addr(table->pde_base,
 			KERNEL_TEMP_BUFFER_BASE);
-	mmu_create_pde_entry(base, page_to_pa(tb->tbuf_pte_page));
+
+	mmu_create_pde_entry(base,
+			page_to_pa(tb->tbuf_pte_page),
+			KERNEL_TEMP_BUFFER_BASE);
 
 	table->mmap_current_base = PROCESS_USER_MMAP_BASE;
 
@@ -608,7 +567,7 @@ int pgt_map_mmap_page(struct task_page_table *table,
 
 	/* update the free nr */
 	pte_page->pinfo++;
-	mmu_create_pte_entry(pte, page_to_pa(page));
+	mmu_create_pte_entry(pte, page_to_pa(page), user_addr);
 	page_set_map_address(page, user_addr);
 
 	return 0;
@@ -671,10 +630,20 @@ int __init_text pgt_init(void)
 	memset((char *)&pgt_buffer, 0, sizeof(struct pgt_buffer));
 	size = PDE_TABLE_SIZE;
 	align = PDE_TABLE_ALIGN_SIZE;
+	init_list(&pgt_buffer.list);
+	spin_lock_init(&pgt_buffer.pgt_lock);
 
 	/* do not alloc buffer if align size is PAGE_SIZE */
 	if (align == PAGE_SIZE)
 		count = 0;
+
+	/* Boot pde need to be care about */
+	page = va_to_page(mmu_get_boot_pde());
+	if (page) {
+		add_page_to_list_tail(page, &pgt_buffer.list);
+		pgt_buffer.alloc_nr++;
+		pgt_buffer.nr_free++;
+	}
 
 	for (i = 0; i < count; i++) {
 		page = get_free_pages_align(page_nr(size),

@@ -148,6 +148,15 @@ static int set_up_task_stack(struct task_struct *task, pt_regs *regs)
 int switch_task(struct task_struct *cur,
 		struct task_struct *next)
 {
+	if (cur == next)
+		return 0;
+
+	if (task_is_kernel(next))
+		return 0;
+
+	arch_flush_cache();
+	arch_switch_page_table(next->mm_struct.page_table.pde_base_pa);
+
 	return 0;
 }
 
@@ -527,6 +536,8 @@ int __init_text build_idle_task(void)
 
 	init_sched_struct(idle);
 	idle->state = PROCESS_STATE_RUNNING;
+
+	init_task_page_table(&idle->mm_struct.page_table);
 
 	/* update current and next_run to idle task */
 	current = idle;

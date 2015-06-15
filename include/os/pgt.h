@@ -28,7 +28,7 @@ struct pte_cache_list {
 struct pgt_temp_buffer {
 	unsigned long tbuf_pte_base;
 	struct page *tbuf_pte_page;
-	struct mutex tbuf_mutex;
+	spin_lock_t tbuf_lock;
 	int tbuf_page_nr;
 };
 
@@ -59,8 +59,10 @@ void free_task_page_table(struct task_page_table *pgt);
 
 int init_task_page_table(struct task_page_table *table);
 
-unsigned long pgt_map_temp_memory(struct task_page_table *table,
-		struct pgt_map_info *info);
+unsigned long pgt_map_temp_page(struct task_page_table *table,
+		struct page *page);
+
+int pgt_unmap_temp_page(struct task_page_table *table, unsigned long base);
 
 int pgt_map_task_page(struct task_page_table *table,
 		struct page *page, unsigned long user_addr);
@@ -71,11 +73,5 @@ int pgt_map_task_memory(struct task_page_table *table,
 
 int pgt_map_mmap_page(struct task_page_table *table,
 		struct page *page, unsigned long user_addr);
-
-int request_pgt_temp_memory(struct task_page_table *table,
-		struct pgt_map_info *map_info);
-
-
-void free_pgt_temp_memory(struct task_page_table *table);
 
 #endif

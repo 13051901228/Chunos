@@ -43,23 +43,6 @@ int cpu_idle(void)
 	return 0;
 }
 
-int hello(void *argv)
-{
-	while (1) {
-		printk("hello world\n");
-		sched();
-	}
-}
-
-int hello1(void *argv)
-{
-	while (1) {
-		printk("hello world ########\n");
-		sched();
-	}
-}
-
-
 int main(void)
 {
 	int i = 0;
@@ -102,11 +85,8 @@ int main(void)
 	/* now we can enable irq */
 	//early_console_deinit();
 	enable_irqs();
-	__asm("int $20");
 
 	kthread_run("system_killer", system_killer, NULL);
-	kthread_run("hello", hello, NULL);
-	kthread_run("hello1", hello1, NULL);
 
 	init_task();
 

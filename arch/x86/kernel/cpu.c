@@ -38,12 +38,12 @@ u32 arch_get_page_table_attr(u32 flag)
 	return 0;
 }
 
-void arch_flush_cache(void)
+void inline arch_flush_mmu_tlb(void)
 {
-
+	__asm ("wbinvd");
 }
 
-void inline arch_flush_mmu_tlb(void)
+void inline arch_flush_cache(void)
 {
 	__asm ("wbinvd");
 }

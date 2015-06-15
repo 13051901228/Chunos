@@ -79,7 +79,7 @@ x86_clear_pte_entry(unsigned long pte)
 
 static inline unsigned long x86_pte_pde_to_pa(unsigned long pde)
 {
-	return (*(unsigned long *)pde) & (0xfffc0000);
+	return (*(unsigned long *)pde) & (0xfffff000);
 }
 
 static inline unsigned long x86_pte_to_pa(unsigned long pte)
@@ -104,6 +104,6 @@ struct mmu_ops x86_mmu_ops = {
 };
 
 struct mmu x86_mmu = {
-	.kernel_pde_base	= KERNEL_PDE_BASE,
+	.boot_pde	= KERNEL_PDE_BASE,
 	.mmu_ops		= &x86_mmu_ops,
 };

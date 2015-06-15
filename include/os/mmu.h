@@ -23,8 +23,6 @@
 #define PDE_ALIGN(addr)			ARCH_PDE_ALIGN(addr)
 #define PDE_MIN_ALIGN(addr)		ARCH_PDE_MIN_ALIGN(addr)
 
-#define PDE_TABLE_SIZE			ARCH_PDE_TABLE_SIZE
-
 struct mmu_ops {
 	void (*build_pde_entry)(unsigned long pde_base,
 			unsigned long pa, int flag);
@@ -47,7 +45,7 @@ struct mmu_ops {
 };
 
 struct mmu {
-	unsigned long kernel_pde_base;
+	unsigned long boot_pde;
 	struct mmu_ops *mmu_ops;
 };
 
@@ -66,10 +64,10 @@ unsigned long build_kernel_pde_entry(unsigned long vstart,
 			  size_t size, u32 flag);
 
 void mmu_create_pde_entry(unsigned long pde_entry_addr,
-			unsigned long pte_base);
+		unsigned long pte_base, unsigned long va);
 
 void mmu_create_pte_entry(unsigned long pte_entry_addr,
-			unsigned long pa);
+			unsigned long pa, unsigned long va);
 
 unsigned long inline mmu_pde_entry_to_pa(unsigned long pde);
 

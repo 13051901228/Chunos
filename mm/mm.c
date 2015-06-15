@@ -526,6 +526,7 @@ static int update_boot_section_info(struct mm_section *section,
 
 		/* init page struct */
 		page->phy_address = tmp - pv_offset;
+		page->map_address = tmp;
 		init_list(&page->plist);
 		page->count = 1;
 		page->flag = __GFP_KERNEL;
@@ -716,7 +717,6 @@ static inline struct mm_section *pa_get_section(unsigned long pa)
 {
 	int i = 0;
 	struct mm_section *section = NULL;
-	size_t size = section->nr_page << PAGE_SHIFT;
 
 	while (1) {
 		section = section_table[i++];
@@ -724,7 +724,7 @@ static inline struct mm_section *pa_get_section(unsigned long pa)
 			break;
 
 		if ((pa >= section->phy_start) &&
-			(pa < (section->phy_start + size)))
+			(pa < (section->phy_start + section->size)))
 			break;
 	}
 
@@ -1074,8 +1074,11 @@ static struct page *find_align_page(struct mm_section *section,
 {
 	int i, id;
 	struct page *page = NULL;
-	unsigned long base = section->vir_start;
-	size_t size = section->nr_page << PAGE_SHIFT;
+	unsigned long base;
+	size_t size = section->size;
+
+	base = section->vir_start + (section->bm_current << PAGE_SHIFT);
+	base = min_align(base, align);
 
 	for ( ; base < section->vir_start + size; base += align) {
 		id = (base - section->vir_start) >> PAGE_SHIFT;
@@ -1158,6 +1161,9 @@ static struct page *__request_special_pages(int nr,
 			page = find_match_page(section, align, nr, flag);
 		else
 			page = find_align_page(section, align, nr, flag);
+
+		if (page)
+			break;
 	}
 
 	if (page)

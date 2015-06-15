@@ -4,6 +4,14 @@
 .extern next_run
 .extern switch_task
 
+.global arch_switch_page_table
+arch_switch_page_table:
+	push %eax
+	mov 8(%esp), %eax
+	mov %eax, %cr3
+	pop %eax
+	ret
+
 .global arch_enter_critical
 arch_enter_critical:
 	push %eax
@@ -59,6 +67,8 @@ arch_switch_task_sw:
 	mov 	(%edx), %ebx
 	mov 	%esp, (%eax)	/* store the stack base to current process */
 
+	push %ebx
+	push %eax
 	call 	switch_task
 
 	lea 	current, %ecx
@@ -73,7 +83,7 @@ arch_switch_task_sw:
 	pop 	%fs
 	pop 	%ds
 	pop 	%es
-	
+
 	add 	$8, %esp
 	popa
 

@@ -34,7 +34,7 @@ int elf_load_elf_image(struct elf_file *efile,
 		rodata_size = MIN(load_size, size);
 		tar += rodata_size;
 		size -= rodata_size;
-		offset_td = off;
+		offset_td = off + section->offset;
 		off += rodata_size;
 	}
 
@@ -51,9 +51,11 @@ int elf_load_elf_image(struct elf_file *efile,
 	if (size != 0)
 		kernel_warning("Elf size may not correct\n");
 
+	size = rodata_size + bss_size;
+
 	if (rodata_size) {
 		ret = kernel_seek(efile->file, offset_td, SEEK_SET);
-		if (ret)
+		if (ret < 0)
 			return -ENOENT;
 
 		while (rodata_size) {
@@ -71,7 +73,7 @@ int elf_load_elf_image(struct elf_file *efile,
 	if (bss_size)
 		memset((char *)bss_base, 0, bss_size);
 
-	return 0;
+	return size;
 }
 
 struct elf_file *dup_elf_info(struct elf_file *src)

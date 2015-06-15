@@ -169,9 +169,11 @@ int task_mm_load_elf_image(struct mm_struct *mm)
 	size_t load_size;
 	int page_nr, ret;
 	struct list_head *list = &section->alloc_mem;
-	struct pgt_map_info map_info = { 0 };
+	struct list_head *temp;
+	struct page *page;
 	unsigned long base, offset = 0;
-	struct task_page_table *ctable = &current->mm_struct.page_table;
+	struct task_page_table *ctable =
+		&current->mm_struct.page_table;
 
 	/* 
 	 * here we load the all size, later will consider
@@ -196,21 +198,17 @@ int task_mm_load_elf_image(struct mm_struct *mm)
 		return ret;
 
 	if (mm != &current->mm_struct) {
-		page_nr = page_nr(load_size);
-		map_info.mlist = list_next(list);
-		map_info.alloc_nr = page_nr;
-		request_pgt_temp_memory(ctable, &map_info);
-
-		while (page_nr) {
-			map_info.request_nr = page_nr;
-			base = pgt_map_temp_memory(ctable, &map_info);
-			elf_load_elf_image(mm->elf_file, base,
-					map_info.request_nr << PAGE_SHIFT, offset);
-			offset += map_info.request_nr << PAGE_SHIFT;
-			page_nr -= map_info.request_nr;
+		list_for_each(list, temp) {
+			page = list_to_page(temp);
+			base = pgt_map_temp_page(ctable, page);
+			ret = elf_load_elf_image(mm->elf_file, base,
+					MIN(load_size, PAGE_SIZE), offset);
+			load_size -= ret;
+			offset += ret;
+			pgt_unmap_temp_page(ctable, base);
 		}
 
-		free_pgt_temp_memory(ctable);
+		ret = 0;
 	} else {
 		ret = elf_load_elf_image(mm->elf_file,
 				section->base_addr,
@@ -223,35 +221,30 @@ int task_mm_load_elf_image(struct mm_struct *mm)
 static int copy_section_memory(struct task_mm_section *new,
 		struct task_mm_section *parent, int type)
 {
-	int nr = 0;
 	int count = new->alloc_pages;
 	unsigned long pbase = parent->base_addr;
 	unsigned long nbase;
-	struct pgt_map_info map_info = { 0 };
-	struct task_page_table *page_table = &current->mm_struct.page_table;
-
-	map_info.type = PGT_MAP_MMAP;
-	map_info.alloc_nr = count;
-	map_info.mlist = list_next(&new->alloc_mem);
-	request_pgt_temp_memory(page_table, &map_info);
+	struct page *page;
+	struct list_head *list = list_next(&new->alloc_mem);
+	struct task_page_table *page_table =
+		&current->mm_struct.page_table;
 
 	if (new->alloc_pages != parent->alloc_pages)
 		return -EINVAL;
 
 	while (count) {
-		map_info.request_nr = count;
-		nbase = pgt_map_temp_memory(page_table, &map_info);
+		page = list_to_page(list);
+		nbase = pgt_map_temp_page(page_table, page);
 		if (nbase)
 			return -EFAULT;
 
-		memcpy((char *)nbase, (char *)pbase,
-				nr << PAGE_SHIFT);
+		memcpy((char *)nbase, (char *)pbase, PAGE_SIZE);
 		if (type)
-			pbase += (nr << PAGE_SHIFT);
+			pbase += PAGE_SIZE;
 		else
-			pbase -= (nr >> PAGE_SHIFT);
+			pbase -= PAGE_SIZE;
 
-		count -= map_info.request_nr;
+		count --;
 	}
 
 	return 0;
@@ -317,29 +310,19 @@ static int copy_task_mmap(struct mm_struct *new,
 		&new->mm_section[TASK_MM_SECTION_MMAP];
 	struct task_mm_section *p =
 		&parent->mm_section[TASK_MM_SECTION_MMAP];
-	struct list_head *list, *nl, *pl;
+	struct list_head *nl, *pl;
 	struct page *np, *pp;
-	int ret;
-	struct pgt_map_info map_info = { 0 };
+	int ret, count;
 	unsigned long base;
 
 	if (n->alloc_pages != p->alloc_pages)
 		return -EINVAL;
 
-	nl = &n->alloc_mem;
-	pl = &p->alloc_mem;
+	nl = list_next(&n->alloc_mem);
+	pl = list_next(&p->alloc_mem);
+	count = n->alloc_pages;
 
-	map_info.type = PGT_MAP_MMAP;
-	map_info.alloc_nr = 1;
-	map_info.mlist = list_next(nl);
-	request_pgt_temp_memory(&parent->page_table, &map_info);
-
-	/*
-	 * one page when map temp memroy
-	 */
-	map_info.request_nr = 1;
-
-	list_for_each(pl, list) {
+	while (count) {
 		np = list_to_page(nl);
 		pp = list_to_page(pl);
 		
@@ -348,14 +331,17 @@ static int copy_task_mmap(struct mm_struct *new,
 		if (ret)
 			return ret;
 
-		base = pgt_map_temp_memory(&parent->page_table, &map_info);
+		base = pgt_map_temp_page(&parent->page_table, np);
 		if (!base)
 			return -EFAULT;
 
 		memcpy((char *)base, (char *)page_to_va(pp), PAGE_SIZE);
-	}
 
-	free_pgt_temp_memory(&new->page_table);
+		nl = list_next(nl);
+		pl = list_next(pl);
+		count--;
+		pgt_unmap_temp_page(&parent->page_table, base);
+	}
 
 	return 0;
 }
@@ -421,18 +407,13 @@ int task_mm_setup_meta_data(struct mm_struct *mm, void *callback[])
 	struct task_mm_section *section =
 		&mm->mm_section[TASK_MM_SECTION_META];
 	unsigned long base;
-	struct pgt_map_info map_info = { 0 };
+	struct list_head *list = list_next(&section->alloc_mem);
 	struct task_page_table *ctable =
 		&current->mm_struct.page_table;
 	meta_data_func func;
 
 	if (&current->mm_struct != mm) {
-		map_info.alloc_nr = 1;
-		map_info.type = PGT_MAP_NORMAL;
-		map_info.mlist = list_next(&section->alloc_mem);
-		map_info.request_nr = 1;
-		request_pgt_temp_memory(ctable, &map_info);
-		base = pgt_map_temp_memory(ctable, &map_info);
+		base = pgt_map_temp_page(ctable, list_to_page(list));
 		if (!base)
 			return -ENOMEM;
 	} else {
@@ -448,7 +429,7 @@ int task_mm_setup_meta_data(struct mm_struct *mm, void *callback[])
 	}
 
 	if (&current->mm_struct != mm)
-		free_pgt_temp_memory(&current->mm_struct.page_table);
+		pgt_unmap_temp_page(&current->mm_struct.page_table, base);
 
 	return 0;
 }
