@@ -48,13 +48,10 @@ void update_tss(struct task_struct *task)
 
 void __init_text tss_init(void)
 {
-	unsigned long tss_base =
-		va_to_pa((unsigned long)x86_tss_base);
-
-	if (!tss_base)
+	if (!x86_tss_base)
 		return;
 
-	setup_kernel_tss_des((void *)tss_base, 1);
+	setup_kernel_tss_des((void *)x86_tss_base, 1);
 	__asm("movw $0x68, %ax");
 	__asm("ltr %ax");
 }

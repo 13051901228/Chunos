@@ -35,7 +35,7 @@ static void inline
 x86_build_pde_entry(unsigned long pde_address,
 		unsigned long pa, int flag)
 {
-	pa |= (PDE_PS | PDE_RW | PDE_P);
+	pa |= (PDE_PS | PDE_RW | PDE_P | PDE_US);
 
 	/*
 	 * if memory type is IO or DMA, must set the
@@ -53,7 +53,7 @@ x86_build_pte_pde_entry(unsigned long pde,
 {
 	/* use to map user PDE and use as a 4K page */
 
-	pa |= (PDE_P | PDE_RW);
+	pa |= (PDE_P | PDE_RW | PDE_US);
 	*(unsigned long *)pde = pa;
 }
 
@@ -61,7 +61,7 @@ static void inline
 x86_build_pte_entry(unsigned long pte,
 		unsigned long pa, int flag)
 {
-	pa |= (PTE_P | PTE_RW);
+	pa |= (PTE_P | PTE_RW | PDE_US);
 	*(unsigned long *)pte = pa;
 }
 

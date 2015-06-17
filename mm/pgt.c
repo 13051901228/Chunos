@@ -278,13 +278,10 @@ int pgt_unmap_temp_page(struct task_page_table *table, unsigned long base)
 	return 0;
 }
 
-static int
-__pgt_map_task_memory(struct task_page_table *table,
-		struct list_head *mem_list,
-		unsigned long map_base, int type)
+static int pgt_map_stack_memory(struct task_page_table *table,
+		struct list_head *mem_list, unsigned long map_base)
 {
 	struct page *page;
-	int offset;
 	unsigned long base = map_base;
 	unsigned long pte_end = 0, pte = 0;
 	struct list_head *list = list_next(mem_list);
@@ -292,10 +289,38 @@ __pgt_map_task_memory(struct task_page_table *table,
 	if (!map_base)
 		return -EINVAL;
 
-	if (type)
-		offset = PAGE_SIZE;
-	else
-		offset = 0 - PAGE_SIZE;
+	while (list != mem_list) {
+		base -= PAGE_SIZE;
+		if (pte == pte_end) {
+			pte = pgt_get_mapped_pte_addr(table, base);
+			if (!pte)
+				return -ENOMEM;
+
+			pte_end = min_align(pte - PTES_PER_PDE, PTES_PER_PDE);
+			pte_end -= sizeof(unsigned long);
+		}
+
+		page = list_to_page(list);
+		mmu_create_pte_entry(pte, page_to_pa(page), base);
+		page_set_map_address(page, base);
+
+		pte -= sizeof(unsigned long);
+		list = list_next(list);
+	}
+
+	return 0;
+}
+
+static int pgt_map_normal_memory(struct task_page_table *table,
+		struct list_head *mem_list, unsigned long map_base)
+{
+	struct page *page;
+	unsigned long base = map_base;
+	unsigned long pte_end = 0, pte = 0;
+	struct list_head *list = list_next(mem_list);
+
+	if (!map_base)
+		return -EINVAL;
 
 	while (list != mem_list){
 		if (pte == pte_end) {
@@ -309,7 +334,7 @@ __pgt_map_task_memory(struct task_page_table *table,
 		page = list_to_page(list);
 		mmu_create_pte_entry(pte, page_to_pa(page), base);
 		page_set_map_address(page, base);
-		base += offset;
+		base += PAGE_SIZE;
 
 		pte += sizeof(unsigned long);
 		list = list_next(list);
@@ -318,16 +343,17 @@ __pgt_map_task_memory(struct task_page_table *table,
 	return 0;
 }
 
+
 int pgt_map_task_memory(struct task_page_table *table,
 		struct list_head *mem_list,
 		unsigned long map_base, int type)
 {
 	if (type == PGT_MAP_STACK)
-		return __pgt_map_task_memory(table,
-				mem_list, map_base, 0);
+		return pgt_map_stack_memory(table,
+				mem_list, map_base);
 
-	return __pgt_map_task_memory(table,
-			mem_list, map_base, 1);
+	return pgt_map_normal_memory(table,
+			mem_list, map_base);
 }
 
 int pgt_map_task_page(struct task_page_table *table,

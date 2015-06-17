@@ -41,7 +41,7 @@ unsigned long build_kernel_pde_entry(unsigned long vstart,
 
 	while (size) {
 		mmu->mmu_ops->build_pde_entry(pde_addr, pa, flag);
-		mmu->mmu_ops->invalid_tlb(va);
+		//mmu->mmu_ops->invalid_tlb(va);
 		pa += PDE_ALIGN_SIZE;
 		pde_addr += sizeof(unsigned long);
 		size -= PDE_ALIGN_SIZE;
@@ -56,13 +56,13 @@ void inline mmu_create_pde_entry(unsigned long pde_entry_addr,
 {
 	mmu->mmu_ops->build_pte_pde_entry(pde_entry_addr,
 			pte_base, 0);
-	mmu->mmu_ops->invalid_tlb(va);
 }
 
 void inline mmu_create_pte_entry(unsigned long pte_entry_addr,
 			unsigned long pa, unsigned long va)
 {
 	mmu->mmu_ops->build_pte_entry(pte_entry_addr, pa, 0);
+	mmu->mmu_ops->invalid_tlb(va);
 }
 
 unsigned long inline mmu_pde_entry_to_pa(unsigned long pde)

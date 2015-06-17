@@ -5,7 +5,7 @@
 
 .extern current
 .extern next_run
-.extern switch_task
+.extern x86_switch_task
 
 .macro ISR_COMMON_HANDLER name
 	mov 	32(%esp), %ebx			/* ebx is the error code */
@@ -47,7 +47,7 @@ do_isr_handler_\name:
 	mov 	(%edx), %ebx
 	mov 	%esp, (%eax)			/* store the stack base to current process */
 
-	call 	switch_task
+	call 	x86_switch_task
 
 	lea 	current, %ecx
 	lea 	next_run, %edx

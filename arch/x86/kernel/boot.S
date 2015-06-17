@@ -244,16 +244,6 @@ set_pde_base:
 	va2pa	%eax
 	mov	%eax, %cr3
 
-load_idt_table:
-	lea	idt_table_ptr, %eax
-	va2pa	%eax
-	mov	%eax, %ecx
-	add	$2, %ecx
-	mov	(%ecx), %ebx
-	va2pa	%ebx
-	mov	%ebx, (%ecx)
-	lidt	(%eax)
-
 load_new_gdt:
 	lea	gdt_table_ptr, %eax
 	va2pa	%eax
@@ -294,6 +284,19 @@ enable_paging:
 	bts	$31, %eax
 	mov	%eax, %cr0
 
+	/* idt and gdt addr need to use virtual address */
+update_gdtr:
+	lea	gdt_table_ptr, %eax
+	mov	%eax, %ecx
+	add	$2, %ecx
+	mov	$SYSTEM_GDT_BASE, %ebx
+	mov	%ebx, (%ecx)
+	lgdt	(%eax)
+
+set_idt:
+	lea	idt_table_ptr, %eax
+	lidt	(%eax)
+
 goto_main:
 	ljmp	$0x8, $main
 
@@ -311,7 +314,7 @@ gdt_table:				# base 0 limit 0xfffff
 	.quad	0x00cf92000000ffff	# kernel gs expand-up
 	.quad	0x00cffa000000ffff	# user cs
 	.quad	0x00cff2000000ffff	# user ds expand-up
-	.quad	0x00cff6000000ffff	# user ss expand-up
+	.quad	0x00cff2000000ffff	# user ss expand-up
 	.quad	0x00cff2000000ffff	# user es expand-up
 	.quad	0x00cff2000000ffff	# user fs expand-up
 	.quad	0x00cff2000000ffff	# user gs expand-up

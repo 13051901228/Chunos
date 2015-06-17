@@ -12,6 +12,7 @@
 #include "include/gdt.h"
 
 extern void x86_idt_init(void);
+extern void x86_switch_page_table(unsigned long base);
 
 void inline arch_disable_irqs(void)
 {
@@ -98,7 +99,7 @@ void arch_init_pt_regs(pt_regs *regs, void *fn, void *arg)
 	}
 }
 
-int arch_set_up_task_stack(unsigned long *stack_base, pt_regs *regs)
+unsigned long arch_set_up_task_stack(unsigned long *stack_base, pt_regs *regs)
 {
 	/* resever 8 bytes for user esp and ss */
 	*(--stack_base) = regs->ss;
@@ -123,7 +124,7 @@ int arch_set_up_task_stack(unsigned long *stack_base, pt_regs *regs)
 	*(--stack_base) = regs->fs;
 	*(--stack_base) = regs->gs;
 
-	return stack_base;
+	return (unsigned long)stack_base;
 }
 
 void arch_set_mode_stack(u32 base, u32 mode)
@@ -161,4 +162,15 @@ int arch_early_init(void)
 {
 	x86_idt_init();
 	return 0;
+}
+
+void x86_switch_task(struct task_struct *cur, struct task_struct *next)
+{
+	if (cur == next)
+		return;
+
+	if (task_is_user(next)) {
+		arch_flush_cache();
+		x86_switch_page_table(next->mm_struct.page_table.pde_base_pa);
+	}
 }

@@ -3,9 +3,10 @@
 .extern current
 .extern next_run
 .extern switch_task
+.extern x86_switch_task
 
-.global arch_switch_page_table
-arch_switch_page_table:
+.global x86_switch_page_table
+x86_switch_page_table:
 	push %eax
 	mov 8(%esp), %eax
 	mov %eax, %cr3
@@ -41,7 +42,6 @@ __ret_enable_irq:
 	sti
 	ret
 
-
 .global arch_switch_task_sw
 arch_switch_task_sw:
 	push 	%eax
@@ -67,9 +67,11 @@ arch_switch_task_sw:
 	mov 	(%edx), %ebx
 	mov 	%esp, (%eax)	/* store the stack base to current process */
 
-	push %ebx
-	push %eax
-	call 	switch_task
+	push	%ebx
+	push	%eax
+	call 	x86_switch_task
+	pop	%eax
+	pop	%ebx
 
 	lea 	current, %ecx
 	lea 	next_run, %edx

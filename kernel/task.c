@@ -140,26 +140,6 @@ static int set_up_task_stack(struct task_struct *task, pt_regs *regs)
 	return 0;
 }
 
-/*
- * this function used to do some work when
- * switch task such as exchange the page
- * table.
- */
-int switch_task(struct task_struct *cur,
-		struct task_struct *next)
-{
-	if (cur == next)
-		return 0;
-
-	if (task_is_kernel(next))
-		return 0;
-
-	arch_flush_cache();
-	arch_switch_page_table(next->mm_struct.page_table.pde_base_pa);
-
-	return 0;
-}
-
 static struct task_struct *allocate_task(char *name)
 {
 	struct task_struct *task = NULL;
