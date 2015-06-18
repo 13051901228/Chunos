@@ -39,7 +39,11 @@ isr_from_user_\name:
 	push 	$USER_GS
 
 do_isr_handler_\name:
+	push %ebx
+	push %eax
 	call 	%ecx
+	pop %eax
+	pop %ebx
 
 	lea 	current, %ecx
 	lea 	next_run, %edx
@@ -47,7 +51,11 @@ do_isr_handler_\name:
 	mov 	(%edx), %ebx
 	mov 	%esp, (%eax)			/* store the stack base to current process */
 
+	push %ebx
+	push %eax
 	call 	x86_switch_task
+	pop %eax
+	pop %ebx
 
 	lea 	current, %ecx
 	lea 	next_run, %edx
@@ -144,9 +152,9 @@ x86_trap_undef:
 	jmp 	isr_common_stub_nec
 
 .extern x86_trap_syscall_handler		/* this is for syscall */
-.global x86_trap_syscall
+.global x86_irq_syscall
 .align 8
-x86_trap_syscall:
+x86_irq_syscall:
 	cli
 	push 	%eax				/* eax is the syscall number */
 	pusha

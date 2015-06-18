@@ -13,8 +13,9 @@
 #define IDT_TYPE_INTERRUPT_GATE		(0)
 #define IDT_TYPE_TRAP_GATE		(1)
 #define IDT_TYPE_TASK_GATE		(2)
+#define IDT_TYPE_SYSCALL_GATE		(3)
 
-#define MAX_IDT_ENTRY			(1024)
+#define MAX_IDT_ENTRY			(512)
 
 struct idt_entry *idt_base = (struct idt_entry *)SYSTEM_IDT_BASE;
 
@@ -53,9 +54,23 @@ setup_trap_gate(struct idt_entry *entry, unsigned long func)
 }
 
 static inline void
+setup_syscall_gate(struct idt_entry *entry, unsigned long func)
+{
+	struct interrupt_gate *gate = &entry->interrupt_gate;
+
+	/* trap for syscall's DPL need 3 */
+	gate->offset_l = func & 0xffff;
+	gate->seg_sel = KERNEL_CS;
+	gate->attr = 0xe;
+	gate->dpl = 0x3;
+	gate->p = 1;
+	gate->offset_h = (func & 0xffff0000) >> 16;
+}
+
+static inline void
 setup_task_gate(struct idt_entry *entry, unsigned long func)
 {
-	/* TBC */
+
 }
 
 static int setup_idt_entry(int index,
@@ -82,6 +97,10 @@ static int setup_idt_entry(int index,
 		setup_task_gate(entry, func);
 		break;
 
+	case IDT_TYPE_SYSCALL_GATE:
+		setup_syscall_gate(entry, func);
+		break;
+
 	default:
 		return -EINVAL;
 	}
@@ -102,6 +121,11 @@ int install_trap_gate(int index, unsigned long func)
 int install_task_gate(int index, unsigned long func)
 {
 	return setup_idt_entry(index, func, IDT_TYPE_TASK_GATE);
+}
+
+int install_syscall_gate(int index, unsigned long func)
+{
+	return setup_idt_entry(index, func, IDT_TYPE_SYSCALL_GATE);
 }
 
 void x86_idt_init(void)

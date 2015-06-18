@@ -52,7 +52,7 @@ void x86_trap_ac(void);
 void x86_trap_nc(void);
 void x86_trap_xf(void);
 void x86_trap_undef(void);
-void x86_trap_syscall(void);
+void x86_irq_syscall(void);
 
 void x86_irq_0(void);
 void x86_irq_1(void);

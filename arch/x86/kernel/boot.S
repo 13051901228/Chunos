@@ -37,13 +37,13 @@ _start:
 	.align 4
 
 .global gdt_table_ptr
-gdt_table_ptr:	.word 512
+gdt_table_ptr:	.word 4096
 		.long SYSTEM_GDT_BASE
 
 	.align 4
 
 .global idt_table_ptr
-idt_table_ptr:	.word 512
+idt_table_ptr:	.word 4096
 		.long SYSTEM_IDT_BASE
 
 	.align 4

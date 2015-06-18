@@ -56,4 +56,6 @@ int install_trap_gate(int index, unsigned long func);
 
 int install_task_gate(int index, unsigned long func);
 
+int install_syscall_gate(int index, unsigned long func);
+
 #endif

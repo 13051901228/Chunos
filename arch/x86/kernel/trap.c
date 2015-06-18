@@ -143,8 +143,7 @@ void __init_text trap_init(void)
 	install_trap_gate(X86_TRAP_MC, (unsigned long)x86_trap_nc);
 	install_trap_gate(X86_TRAP_XF, (unsigned long)x86_trap_xf);
 
-	install_trap_gate(20, (unsigned long)x86_trap_syscall);
-
+	install_trap_gate(20, (unsigned long)x86_trap_undef);
 	install_trap_gate(21, (unsigned long)x86_trap_undef);
 	install_trap_gate(22, (unsigned long)x86_trap_undef);
 	install_trap_gate(23, (unsigned long)x86_trap_undef);
@@ -253,7 +252,9 @@ void __init_text trap_init(void)
 	install_interrupt_gate(125, (unsigned long)x86_irq_93);
 	install_interrupt_gate(126, (unsigned long)x86_irq_94);
 	install_interrupt_gate(127, (unsigned long)x86_irq_95);
-	install_interrupt_gate(128, (unsigned long)x86_irq_96);
+
+	install_syscall_gate(128, (unsigned long)x86_irq_syscall);
+
 	install_interrupt_gate(129, (unsigned long)x86_irq_97);
 	install_interrupt_gate(130, (unsigned long)x86_irq_98);
 	install_interrupt_gate(131, (unsigned long)x86_irq_99);

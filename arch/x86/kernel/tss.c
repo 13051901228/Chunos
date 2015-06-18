@@ -39,19 +39,29 @@ struct x86_tss {
 	unsigned short res_iobitmap, iobitmap;
 };
 
-static struct x86_tss *x86_tss_base = (struct x86_tss *)SYSTEM_TSS_BASE;
+static struct x86_tss *x86_tss = (struct x86_tss *)SYSTEM_TSS_BASE;
 
-void update_tss(struct task_struct *task)
+void inline x86_setup_tss(struct task_struct *task)
 {
-
+	x86_tss->esp0 = task->stack_base;
 }
 
 void __init_text tss_init(void)
 {
-	if (!x86_tss_base)
+	if (!x86_tss)
 		return;
 
-	setup_kernel_tss_des((void *)x86_tss_base, 1);
+	memset((char *)x86_tss, 0, sizeof(struct x86_tss));
+
+	x86_tss->ss0 = KERNEL_SS;
+	x86_tss->es = KERNEL_ES | 0x3;
+	x86_tss->cs = KERNEL_CS | 0x3;
+	x86_tss->ss = KERNEL_SS | 0x3;
+	x86_tss->ds = KERNEL_DS | 0x3;
+	x86_tss->fs = KERNEL_FS | 0x3;
+	x86_tss->gs = KERNEL_GS | 0x3;
+
+	setup_kernel_tss_des((unsigned long)x86_tss, sizeof(struct x86_tss));
 	__asm("movw $0x68, %ax");
 	__asm("ltr %ax");
 }

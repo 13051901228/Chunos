@@ -47,13 +47,13 @@ void setup_tss_des(int index, unsigned long base, int page)
 	des->base_h1 = (base >> 16) & 0xff;
 	des->type = 9;
 	des->s = 0;
-	des->dpl = 0;
+	des->dpl = 3;
 	des->p = 1;
 	des->s_limit_h = (page >> 16) & 0xf;
-	des->avl = 1;
+	des->avl = 0;
 	des->l = 0;
-	des->db = 1;
-	des->g = 1;
+	des->db = 0;
+	des->g = 0;
 	des->base_h2 = (base >> 24) & 0xff;
 }
 

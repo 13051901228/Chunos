@@ -35,7 +35,7 @@ static void inline
 x86_build_pde_entry(unsigned long pde_address,
 		unsigned long pa, int flag)
 {
-	pa |= (PDE_PS | PDE_RW | PDE_P | PDE_US);
+	pa |= (PDE_PS | PDE_RW | PDE_P);
 
 	/*
 	 * if memory type is IO or DMA, must set the

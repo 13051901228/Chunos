@@ -19,6 +19,6 @@
 #define USER_ES		(0x50 | 0x3)
 #define USER_FS		(0x58 | 0x3)
 #define USER_GS		(0x60 | 0x3)
-#define KERNEL_TSS	(0x68 | 0x3)
+#define KERNEL_TSS	(0x68)
 
 #endif

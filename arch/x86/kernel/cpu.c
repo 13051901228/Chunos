@@ -13,6 +13,8 @@
 
 extern void x86_idt_init(void);
 extern void x86_switch_page_table(unsigned long base);
+extern void x86_setup_tss(struct task_struct *task);
+extern void tss_init(void);
 
 void inline arch_disable_irqs(void)
 {
@@ -170,6 +172,7 @@ void x86_switch_task(struct task_struct *cur, struct task_struct *next)
 		return;
 
 	if (task_is_user(next)) {
+		x86_setup_tss(next);
 		arch_flush_cache();
 		x86_switch_page_table(next->mm_struct.page_table.pde_base_pa);
 	}
