@@ -19,7 +19,7 @@ int main(int argc, char **argv)
 	if (pid == 0) {
 		while (1) {
 			delay(60000);
-	//		printf("this is father pid\n");
+			printf("this is father pid\n");
 		}
 	} else {
 		execve("/bin/wshell", arg, env);

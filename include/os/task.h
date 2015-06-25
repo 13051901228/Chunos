@@ -132,11 +132,6 @@ int kill_task(struct task_struct *task);
 
 int task_kill_self(struct task_struct *task);
 
-static inline pt_regs *get_pt_regs(void)
-{
-	return arch_get_pt_regs();
-}
-
 int mmap(struct task_struct *task, unsigned long start,
 		unsigned long virt, int flags,
 		int fd, offset_t offset);

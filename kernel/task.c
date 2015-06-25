@@ -112,7 +112,7 @@ static int copy_process(struct task_struct *new)
 {
 	struct task_struct *old = new->parent;
 
-	task_mm_copy_task_memory(old, new);
+	task_mm_copy_task_memory(new, old);
 
 	return 0;
 }
@@ -212,6 +212,11 @@ exit:
 	return NULL;
 }
 
+static inline void set_up_task_return_value(int value, pt_regs *reg)
+{
+	return arch_set_up_task_return_value(value, reg);
+}
+
 int do_fork(char *name, pt_regs *regs, unsigned long flag)
 {
 	struct task_struct *new;
@@ -223,13 +228,18 @@ int do_fork(char *name, pt_regs *regs, unsigned long flag)
 		return -ENOMEM;
 	}
 
-	if (task_is_user(new))
-		copy_process(new);
+	if (task_is_user(new)) {
+		if (copy_process(new)) {
+			release_task(new);
+			return -ENOMEM;
+		}
+	}
 
+	set_up_task_return_value(new->pid, regs);
 	set_up_task_stack(new, regs);
 	set_task_state(new, PROCESS_STATE_PREPARE);
 
-	return new->pid;
+	return 0;
 }
 
 static void inline init_pt_regs(pt_regs *regs, void *fn, void *arg)
@@ -408,13 +418,13 @@ static int task_setup_meta_data(struct task_struct *task)
 
 int do_exec(char __user *name,
 	    char __user **argv,
-	    char __user **envp,
-	    pt_regs *regs)
+	    char __user **envp)
 {
 	struct task_struct *new;
 	int err = 0;
 	unsigned long flag = current->flag;
 	int arg_num = 0;
+	pt_regs regs;
 
 	if (current->flag & PROCESS_TYPE_KERNEL) {
 		/*
@@ -469,13 +479,13 @@ int do_exec(char __user *name,
 	flush_cache();
 
 	/* modify the regs for new process. */
-	init_pt_regs(regs, NULL, (void *)arg_num);
+	init_pt_regs(&regs, NULL, (void *)arg_num);
 
 	/*
 	 * fix me - whether need to do this if exec
 	 * was called by user space process?
 	 */
-	set_up_task_stack(new, regs);
+	set_up_task_stack(new, &regs);
 	set_task_state(new, PROCESS_STATE_PREPARE);
 
 out_err:
@@ -487,15 +497,12 @@ out_err:
 
 int kernel_exec(char *filename)
 {
-	pt_regs regs;
-
-	memset((char *)&regs, 0, sizeof(pt_regs));
 	init_argv[0] = NULL;
 	init_argv[1] = NULL;
 
 	return do_exec((char __user *)filename,
 		       (char __user **)init_argv,
-		       (char __user **)init_envp, &regs);
+		       (char __user **)init_envp);
 }
 
 

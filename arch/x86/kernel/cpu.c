@@ -139,6 +139,11 @@ int arch_irq_init(void)
 	return 0;
 }
 
+void arch_set_up_task_return_value(int value, pt_regs *reg)
+{
+	reg->eax = value;
+}
+
 int arch_init(void)
 {
 	tss_init();

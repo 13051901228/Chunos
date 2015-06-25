@@ -4,19 +4,20 @@
 .extern next_run
 .extern switch_task
 .extern x86_switch_task
+.extern get_syscall_handler
 
 .global x86_switch_page_table
 x86_switch_page_table:
-	push %eax
-	mov 8(%esp), %eax
-	mov %eax, %cr3
-	pop %eax
+	push	%eax
+	mov 	8(%esp), %eax
+	mov 	%eax, %cr3
+	pop 	%eax
 	ret
 
 .global arch_enter_critical
 arch_enter_critical:
-	push %eax
-	push %ebx
+	push 	%eax
+	push 	%ebx
 	pushf
 	pop 	%ebx
 	mov	12(%esp), %eax
@@ -24,6 +25,48 @@ arch_enter_critical:
 	pop	%ebx
 	pop	%eax
 	cli
+	ret
+
+.global x86_trap_syscall_handler
+x86_trap_syscall_handler:
+	push	%ebx
+	push	%eax
+	call 	get_syscall_handler
+	add	$4, %esp
+	pop	%ebx
+
+	cmp	$0, %eax
+	jne	do_syscall_handler
+
+	mov	$-22, %eax
+	jmp	out_syscall_handler
+
+do_syscall_handler:
+	/* push arg to the stack */
+	push	%ebx
+	push 	24(%ebx)		/* edi is arg5 */
+	push 	32(%ebx)		/* ebp is arg4 */
+	push 	28(%ebx)		/* esi is arg3 */
+	push 	44(%ebx)		/* edx is arg2 */
+	push 	48(%ebx)		/* ecx is arg1 */
+	push 	40(%ebx) 		/* ebx is arg0 */
+
+	sti
+	call	%eax
+	cli
+
+	add 	$24, %esp
+	pop	%ebx
+
+out_syscall_handler:
+	mov 	%eax, 52(%ebx)		/* store the returen value to userspace */
+	ret
+
+.global get_pt_regs
+get_pt_regs:				/* this must called in c function */
+	mov	%ebp, %eax
+	add	$32, %eax
+	mov	(%eax), %eax
 	ret
 
 .global arch_exit_critical
@@ -70,8 +113,7 @@ arch_switch_task_sw:
 	push	%ebx
 	push	%eax
 	call 	x86_switch_task
-	pop	%eax
-	pop	%ebx
+	add	$8, %esi
 
 	lea 	current, %ecx
 	lea 	next_run, %edx

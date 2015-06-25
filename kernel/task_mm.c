@@ -92,6 +92,7 @@ static void copy_mm_section_info(struct mm_struct *c,
 
 	/* task is started by fork, clear the attr */
 	csection->section_size = psection->section_size;
+	csection->base_addr = psection->base_addr;
 	csection->mapped_size = 0;
 	csection->alloc_pages = 0;
 	csection->flag = psection->flag;
@@ -107,7 +108,7 @@ static int section_get_memory(int count,
 	struct list_head *list;
 
 	if (count == 0)
-		return -EINVAL;
+		return 0;
 
 	if (section->flag & TASK_MM_SECTION_FLAG_MMAP)
 		flag = GFP_MMAP;
@@ -235,11 +236,11 @@ static int copy_section_memory(struct task_mm_section *new,
 	while (count) {
 		page = list_to_page(list);
 		nbase = pgt_map_temp_page(page_table, page);
-		if (nbase)
+		if (!nbase)
 			return -EFAULT;
 
 		memcpy((char *)nbase, (char *)pbase, PAGE_SIZE);
-		if (type)
+		if (type != PGT_MAP_STACK)
 			pbase += PAGE_SIZE;
 		else
 			pbase -= PAGE_SIZE;

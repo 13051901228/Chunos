@@ -115,11 +115,6 @@ void x86_trap_handler_undef(int errcode)
 	panic("UNDEF isr");
 }
 
-int x86_trap_syscall_handler(pt_regs *regs, int errno)
-{
-	return 0;
-}
-
 void __init_text trap_init(void)
 {
 	install_trap_gate(X86_TRAP_DE, (unsigned long)x86_trap_de);

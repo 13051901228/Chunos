@@ -8,10 +8,10 @@
 .extern x86_switch_task
 
 .macro ISR_COMMON_HANDLER name
-	mov 	32(%esp), %ebx			/* ebx is the error code */
+	mov 	32(%esp), %eax			/* ebx is the error code */
 
-	mov 	%esp, %eax
-	add 	$44, %eax			/* eax is pt_regs */
+	mov 	%esp, %ebx
+	sub 	$24, %ebx			/* eax is pt_regs */
 
 	mov 	40(%esp), %edx
 	and 	$0x3, %edx			/* irq from ring3 or ring0 */
@@ -29,7 +29,7 @@
 
 isr_from_user_\name:
 	sub 	$4, %esp			/* user esp */
-	mov 	-52(%esp), %edx
+	mov 	52(%esp), %edx
 	mov 	%edx, (%esp)
 
 	push 	$USER_SS
@@ -39,11 +39,10 @@ isr_from_user_\name:
 	push 	$USER_GS
 
 do_isr_handler_\name:
-	push %ebx
-	push %eax
+	push	%eax
+	push	%ebx
 	call 	%ecx
-	pop %eax
-	pop %ebx
+	add	$8, %esp
 
 	lea 	current, %ecx
 	lea 	next_run, %edx
@@ -51,11 +50,10 @@ do_isr_handler_\name:
 	mov 	(%edx), %ebx
 	mov 	%esp, (%eax)			/* store the stack base to current process */
 
-	push %ebx
-	push %eax
+	push	%ebx
+	push	%eax
 	call 	x86_switch_task
-	pop %eax
-	pop %ebx
+	add	$8, %esp
 
 	lea 	current, %ecx
 	lea 	next_run, %edx

@@ -14,6 +14,21 @@ unsigned long *syscall_table_base = NULL;
 extern unsigned long syscall_table_start;
 extern unsigned long syscall_table_end;
 
+int default_syscall_handler(int num)
+{
+	kernel_error("Unsupport syscall call %d\n", num);
+
+	return 0;
+}
+
+void *get_syscall_handler(int nr)
+{
+	if (nr > (SYSCALL_NR -1))
+		return NULL;
+
+	return (void *)(*(syscall_table_base + nr));
+}
+
 int install_syscall(int nr, unsigned long *addr)
 {
 	unsigned long *tmp;
@@ -35,12 +50,6 @@ int install_syscall(int nr, unsigned long *addr)
 	return error;
 }
 
-int default_syscall_handler(int num)
-{
-	kernel_error("Unsupport syscall call %d\n", num);
-
-	return 0;
-}
 
 int syscall_init(void)
 {
@@ -71,4 +80,3 @@ int syscall_init(void)
 
 	return 0;
 }
-

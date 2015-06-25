@@ -216,6 +216,8 @@ int level_printk(const char *fmt,...)
 	int printed;
 	char buf[1024];
 
+	buf[0] = 0;
+
 	ch = *fmt;
 	if (is_digit(ch)) {
 		ch = ch - '0';
