@@ -12,8 +12,12 @@ void delay(int n)
 int main(int argc, char **argv)
 {
 	int pid;
+	void *buf;
 
-	printf("init process of system %d %s\n", argc, argv[0]);
+	printf("init process of system\n");
+
+	buf = malloc(100);
+	printf("buf is %x\n", (unsigned int)buf);
 
 	pid = fork();
 	if (pid == 0) {

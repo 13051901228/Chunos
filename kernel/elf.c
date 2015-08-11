@@ -41,7 +41,7 @@ int elf_load_elf_image(struct elf_file *efile,
 	section = &efile->sections[SECTION_BSS];
 	if (size) {
 		bss_base = tar;
-		load_size = section->size - off;
+		load_size = section->size - ;
 		bss_size = MIN(load_size, size);
 		tar += bss_size;
 		size -= bss_size;
@@ -115,7 +115,7 @@ static struct elf_file *parse_elf_info(elf_section_header *header,
 		/* whether this section needed allocate mem. */
 		if (tmp->sh_flags & SHF_ALLOC) {
 			name = &str[tmp->sh_name];
-			if (strncmp(name, "bss", 3)) {
+			if (strncmp(name, ".bss", 4)) {
 				/* can be optimized TBD */
 				if (!section_roda->offset)
 					section_roda->offset = tmp->sh_offset;
