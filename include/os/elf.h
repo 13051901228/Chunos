@@ -134,6 +134,8 @@ struct elf_section {
 	u32 offset;		/* section offset in the elf file */
 	u32 size;		/* section size */
 	u32 load_addr;		/* load_address to the memory*/
+	u16 flag;
+	u16 type;
 };
 
 /*
@@ -145,21 +147,21 @@ struct elf_section {
  * 2: bss
  */
 struct elf_file {
+	int section_nr;
 	struct file *file;
 	size_t elf_size;
-	unsigned long elf_base;
+	struct elf_section *sections;
 	unsigned long entry_point_address;
-	struct elf_section sections[SECTION_MAX];
+	unsigned long elf_base;
 };
 
 void release_elf_file(struct elf_file *file);
 
-struct elf_file *get_elf_info(struct file *file);
+struct elf_file *get_elf_info(char *name);
 
 size_t elf_memory_size(struct elf_file *efile);
 
-int elf_load_elf_image(struct elf_file *efile,
-		unsigned long tar, size_t size, offset_t off);
+int elf_load_elf_image(struct elf_file *efile);
 
 void inline release_elf_file(struct elf_file *efile);
 

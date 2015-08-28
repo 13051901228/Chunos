@@ -134,6 +134,7 @@ static int vfs_read(struct file *file, char *buffer, size_t size)
 			return err;
 
 		memcpy(buffer, data_buffer, size_left);
+		size_in_buffer = buffer_size - size_left;
 	}
 
 	if (size_in_buffer == buffer_size) {

@@ -7,145 +7,115 @@
 #include <os/printk.h>
 #include <os/file.h>
 
-int elf_load_elf_image(struct elf_file *efile,
-		unsigned long tar, size_t size, offset_t off)
+int elf_load_elf_image(struct elf_file *efile)
 {
+	int i, ret, re_seek = 0;
 	struct elf_section *section;
-	offset_t offset_td, offset_bss;
-	size_t load_size;
-	size_t ret;
-	unsigned long rodata_base = 0;
-	unsigned long bss_base = 0;
-	size_t rodata_size = 0, bss_size = 0;
+	struct elf_section *section_pre = NULL;
 
-	/* 
-	 * size an tar must be page align
-	 */
-	if (!is_align(tar, PAGE_SIZE) || !efile->file)
-		return -EINVAL;
+	for (i = 0; i < efile->section_nr; i++) {
+		section = &efile->sections[i];
 
-	if (off > efile->elf_size)
-		return -EINVAL;
-
-	section = &efile->sections[SECTION_TEXT_DATA];
-	if (off < section->size) {
-		rodata_base = tar;
-		load_size = section->size - off;
-		rodata_size = MIN(load_size, size);
-		tar += rodata_size;
-		size -= rodata_size;
-		offset_td = off + section->offset;
-		off += rodata_size;
-	}
-
-	section = &efile->sections[SECTION_BSS];
-	if (size) {
-		bss_base = tar;
-		load_size = section->size - ;
-		bss_size = MIN(load_size, size);
-		tar += bss_size;
-		size -= bss_size;
-		offset_bss = off;
-	}
-
-	if (size != 0)
-		kernel_warning("Elf size may not correct\n");
-
-	size = rodata_size + bss_size;
-
-	if (rodata_size) {
-		ret = kernel_seek(efile->file, offset_td, SEEK_SET);
-		if (ret < 0)
-			return -ENOENT;
-
-		while (rodata_size) {
-			load_size = MIN(rodata_size, PAGE_SIZE);
-			ret = kernel_read(efile->file,
-					(char *)rodata_base, load_size);
-			if (ret != load_size)
-				return -EIO;
-
-			rodata_base += load_size;
-			rodata_size -= load_size;
+		if (section->type & SHT_NOBITS) {
+			/* this is a BSS section */
+			memset(section->load_addr, 0, section->size);
+			re_seek = 0;
+			section_pre = NULL;
+			continue;
 		}
+
+		if (section_pre == NULL) {
+			re_seek = 1;
+		} else {
+			if ((section_pre->load_addr + section_pre->size)
+					!= section->load_addr)
+				re_seek = 1;
+		}
+
+		if (re_seek) {
+			ret = kernel_seek(efile->file, section->offset, SEEK_SET);
+			if (ret < 0)
+				return -EIO;
+		}
+
+		ret = kernel_read(efile->file,
+			(char *)section->load_addr, section->size);
+		if (ret != section->size)
+			return -EIO;
+
+		re_seek = 0;
+		section_pre = section;
 	}
 
-	if (bss_size)
-		memset((char *)bss_base, 0, bss_size);
-
-	return size;
+	return 0;
 }
 
-struct elf_file *dup_elf_info(struct elf_file *src)
+static void __parse_elf_info(elf_section_header *header,
+		struct elf_file *efile, int section_num, char *str)
 {
-	struct elf_file *elf_file;
+	int i;
+	elf_section_header *tmp = header;
+	struct elf_section *section = efile->sections;
 
-	if (!src)
-		return NULL;
+	for (i = 0; i < section_num; i++) {
+		if (tmp->sh_flags & SHF_ALLOC) {
+			if (!efile->elf_base) {
+				efile->elf_base = min_align(tmp->sh_addr, PAGE_SIZE);
+				efile->elf_size += tmp->sh_addr - efile->elf_base;
+			}
 
-	elf_file = kzalloc(sizeof(struct elf_file), GFP_KERNEL);
-	if (!elf_file)
-		return NULL;
+			section->offset = tmp->sh_offset;
+			section->load_addr = tmp->sh_addr;
+			section->size = tmp->sh_size;
+			section->type = tmp->sh_type;
+			section->flag = tmp->sh_flags;
+			efile->elf_size += section->size;
+			section++;
+		}
 
-	memcpy((void *)elf_file, (void *)src,
-			sizeof(struct elf_file));
-	return elf_file;
+		tmp++;
+	}
 }
 
 static struct elf_file *parse_elf_info(elf_section_header *header,
 				int section_num, char *str)
 {
-	elf_section_header *tmp = header;
 	int i;
-	char *name;
-	size_t size = 0;
+	elf_section_header *tmp = header;
 	struct elf_file *elf_file =NULL;
-	struct elf_section *section_roda;
-	struct elf_section *section_bss;
 
-	elf_file = (struct elf_file *)
-		kzalloc(sizeof(struct elf_file), GFP_KERNEL);
+	elf_file = (struct elf_file *) kzalloc(sizeof(struct elf_file), GFP_KERNEL);
 	if (elf_file == NULL)
 		return NULL;
 
-	section_roda = &elf_file->sections[SECTION_TEXT_DATA];
-	section_bss = &elf_file->sections[SECTION_BSS];
-
-	for (i = 0; i < section_num; i++) {
-		/* whether this section needed allocate mem. */
-		if (tmp->sh_flags & SHF_ALLOC) {
-			name = &str[tmp->sh_name];
-			if (strncmp(name, ".bss", 4)) {
-				/* can be optimized TBD */
-				if (!section_roda->offset)
-					section_roda->offset = tmp->sh_offset;
-
-				if (!section_roda->load_addr)
-					section_roda->load_addr = tmp->sh_addr;
-
-				section_roda->size += tmp->sh_size;
-			} else {
-				section_bss->offset = tmp->sh_offset;
-				section_bss->load_addr = tmp->sh_addr;
-				section_bss->size = tmp->sh_size;
-			}
-
-			size += tmp->sh_size;
-		}
-
+	for (i = 0; i < section_num; i ++) {
+		if (tmp->sh_flags & SHF_ALLOC)
+			elf_file->section_nr++;
 		tmp++;
 	}
 
-	elf_file->elf_size = size;
-	elf_file->elf_base = section_roda->load_addr;
+	if (!elf_file->section_nr)
+		goto err_out;
+
+	elf_file->sections = kzalloc(sizeof(struct elf_section) *
+			elf_file->section_nr, GFP_KERNEL);
+	if (!elf_file->sections)
+		goto err_out;
+
+	__parse_elf_info(header, elf_file, section_num, str);
 
 	return elf_file;
+
+err_out:
+	kfree(elf_file);
+	return NULL;
 }
 
 void inline release_elf_file(struct elf_file *efile)
 {
 	if (efile) {
 		kernel_close(efile->file);
+		kfree(efile->sections);
 		kfree(efile);
 	}
 }
@@ -160,13 +130,18 @@ unsigned long inline elf_get_elf_base(struct elf_file *efile)
 	return efile->elf_base;
 }
 
-struct elf_file *get_elf_info(struct file *file)
+struct elf_file *get_elf_info(char *name)
 {
 	elf_header hdr;
 	int ret = -1;
 	elf_section_header *header;
 	char *str;
+	struct file *file;
 	struct elf_file *elf_file;
+
+	file = kernel_open(name, O_RDONLY);
+	if (!file)
+		return NULL;
 
 	ret = kernel_read(file, (char *)&hdr, sizeof(elf_header));
 	if (ret < 0) {
@@ -232,6 +207,7 @@ struct elf_file *get_elf_info(struct file *file)
 		goto go_out;
 
 	elf_file->entry_point_address = hdr.e_entry;
+	elf_file->file = file;
 
 go_out:
 	kfree(str);

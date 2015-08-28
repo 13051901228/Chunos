@@ -32,6 +32,7 @@ static char *init_envp[MAX_ENVP + 1] = {NULL};
 extern int init_signal_struct(struct task_struct *task);
 extern int arch_set_up_task_stack(
 	unsigned long stack_base, pt_regs *regs);
+extern struct task_struct *idle;
 
 static int init_task_struct(struct task_struct *task, unsigned long flag)
 {
@@ -173,9 +174,12 @@ static inline void free_task(struct task_struct *task)
 		free_pages((void *)task);
 }
 
-static inline int reinit_task(struct task_struct *task, char *name)
+static inline int reinit_task(struct task_struct *task)
 {
-	return init_mm_struct(task);
+	init_signal_struct(task);
+	init_mm_struct(task);
+
+	return 0;
 }
 
 static struct task_struct *
@@ -426,40 +430,33 @@ int do_exec(char __user *name,
 	int arg_num = 0;
 	pt_regs regs;
 
-	if (current->flag & PROCESS_TYPE_KERNEL) {
-		/*
-		 * need to fork a new task, before exec
-		 * but no call sys_fork to fork a new task
-		 * becase kernel process has not allocate page
-		 * table and mm_struct.
-		 */
+	if (task_is_kernel(current)) {
 		new = alloc_and_init_task(name,
 				PROCESS_FLAG_KERN_EXEC);
 		if (!new) {
-			debug("Can not Create new process when exec\n");
+			panic("Can not Create init process\n");
 			return -ENOMEM;
 		}
 	} else {
-		/* need reinit the mm_struct */
 		new = current;
-		new->argv = argv;
-		new->envp = envp;
-
-		/*
-		 * before reinit it, we need copy the argv
-		 */
-		if (name)
-			strncpy(new->name, name, PROCESS_NAME_SIZE);
-
-		arg_num = task_setup_meta_data(new);
-		if (arg_num < 0)
-			arg_num = 0;
-
-		if (reinit_task(new, name))
-			goto out_err;
-
-		new->flag |= PROCESS_FLAG_USER_EXEC;
+		strncpy(new->name, name, PROCESS_NAME_SIZE);
+		new->flag = PROCESS_FLAG_USER_EXEC;
 	}
+
+	new->argv = argv;
+	new->envp = envp;
+
+	if (!task_is_kernel(current)) {
+		if (reinit_task(new))
+			goto out_err;
+	}
+
+	/*
+	 * before reinit it, we need copy the argv
+	 */
+	arg_num = task_setup_meta_data(new);
+	if (arg_num < 0)
+		arg_num = 0;
 
 	/*
 	 * load the elf file to memory, the original process
@@ -469,7 +466,10 @@ int do_exec(char __user *name,
 	 * if this function is called by kernel, we need use
 	 * temp memory to load its image
 	 */
-	task_mm_load_elf_image(&new->mm_struct);
+	if (task_is_kernel(current))
+		err = task_mm_load_elf_image_1(&new->mm_struct);
+	else
+		err = task_mm_load_elf_image(&new->mm_struct);
 	if (err) {
 		kernel_error("Failed to load elf file to memory\n");
 		goto out_err;
@@ -489,7 +489,7 @@ int do_exec(char __user *name,
 	set_task_state(new, PROCESS_STATE_PREPARE);
 
 out_err:
-	if(err && (flag & PROCESS_TYPE_KERNEL))
+	if(err && task_is_kernel(current))
 		release_task(new);
 
 	return err;
@@ -498,13 +498,10 @@ out_err:
 int kernel_exec(char *filename)
 {
 	init_argv[0] = NULL;
-	init_argv[1] = NULL;
+	init_envp[1] = NULL;
 
-	return do_exec((char __user *)filename,
-		       (char __user **)init_argv,
-		       (char __user **)init_envp);
+	return do_exec(filename, init_argv, init_envp);
 }
-
 
 int __init_text build_idle_task(void)
 {

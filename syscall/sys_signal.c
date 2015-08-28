@@ -64,8 +64,8 @@ void copy_sigreturn_code(struct task_struct *task, unsigned long base)
 	char sigreturn_start[16];
 	char sigreturn_end[16];
 
-	memcpy((char *)base + SIGNAL_META_OFFSET, sigreturn_start,
-			sigreturn_end - sigreturn_start);
+	//memcpy((char *)base + SIGNAL_META_OFFSET, sigreturn_start,
+	//		sigreturn_end - sigreturn_start);
 }
 
 static sighandler_t sys_signal(int signum, sighandler_t handler)

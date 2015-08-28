@@ -20,7 +20,7 @@ struct task_struct;
  * SECTION_META : used to store the argv and envp and other
  */
 typedef enum _task_mm_section_t {
-	TASK_MM_SECTION_RO,
+	TASK_MM_SECTION_ELF,
 	TASK_MM_SECTION_STACK,
 	TASK_MM_SECTION_MMAP,
 	TASK_MM_SECTION_META,

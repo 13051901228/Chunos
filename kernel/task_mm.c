@@ -40,9 +40,10 @@ static void init_task_mm_section(struct mm_struct *mm, int i)
 	struct task_mm_section *section;
 
 	section = &mm->mm_section[i];
+	section->flag = 0;
 
 	switch (i) {
-	case TASK_MM_SECTION_RO:
+	case TASK_MM_SECTION_ELF:
 		section->section_size =
 			elf_memory_size(mm->elf_file);
 		section->base_addr = elf_get_elf_base(mm->elf_file);
@@ -78,7 +79,8 @@ static void init_task_mm_section(struct mm_struct *mm, int i)
 	 * alloc_mem
 	 */
 	section->mapped_size = 0;
-	init_list(&section->alloc_mem);
+	if (!section->alloc_pages)
+		init_list(&section->alloc_mem);
 }
 
 static void copy_mm_section_info(struct mm_struct *c,
@@ -166,15 +168,9 @@ static int alloc_task_user_stack(struct mm_struct *mm)
 int task_mm_load_elf_image(struct mm_struct *mm)
 {
 	struct task_mm_section *section =
-		&mm->mm_section[TASK_MM_SECTION_RO];
+		&mm->mm_section[TASK_MM_SECTION_ELF];
 	size_t load_size;
 	int page_nr, ret;
-	struct list_head *list = &section->alloc_mem;
-	struct list_head *temp;
-	struct page *page;
-	unsigned long base, offset = 0;
-	struct task_page_table *ctable =
-		&current->mm_struct.page_table;
 
 	/* 
 	 * here we load the all size, later will consider
@@ -198,25 +194,7 @@ int task_mm_load_elf_image(struct mm_struct *mm)
 	if (ret)
 		return ret;
 
-	if (mm != &current->mm_struct) {
-		list_for_each(list, temp) {
-			page = list_to_page(temp);
-			base = pgt_map_temp_page(ctable, page);
-			ret = elf_load_elf_image(mm->elf_file, base,
-					MIN(load_size, PAGE_SIZE), offset);
-			load_size -= ret;
-			offset += ret;
-			pgt_unmap_temp_page(ctable, base);
-		}
-
-		ret = 0;
-	} else {
-		ret = elf_load_elf_image(mm->elf_file,
-				section->base_addr,
-				load_size, 0);
-	}
-
-	return ret;
+	return elf_load_elf_image(mm->elf_file);
 }
 
 static int copy_section_memory(struct task_mm_section *new,
@@ -284,7 +262,7 @@ static inline int copy_task_elf(struct mm_struct *new,
 		struct mm_struct *p)
 {
 	return copy_task_mm_section(new, p,
-			TASK_MM_SECTION_RO,
+			TASK_MM_SECTION_ELF,
 			PGT_MAP_NORMAL);
 }
 
@@ -302,6 +280,31 @@ static inline int copy_task_meta(struct mm_struct *new,
 	return copy_task_mm_section(new, p,
 			TASK_MM_SECTION_META,
 			PGT_MAP_NORMAL);
+}
+
+int task_mm_load_elf_image_1(struct mm_struct *mm)
+{
+	int ret;
+	struct mm_struct *current_mm = &current->mm_struct;
+	struct task_mm_section *section = &mm->mm_section[TASK_MM_SECTION_ELF];
+
+	ret = section_get_memory(page_nr(section->section_size), section);
+	if (ret)
+		return -ENOMEM;
+
+	ret = pgt_map_task_memory(&mm->page_table, &section->alloc_mem,
+			section->base_addr, PGT_MAP_NORMAL);
+	if (ret)
+		return ret;
+
+	ret = pgt_map_task_memory(&current_mm->page_table, &section->alloc_mem,
+			section->base_addr, PGT_MAP_NORMAL);
+	if (ret)
+		return ret;
+
+	/* after that we can release the idle's pte page TBD */
+
+	return elf_load_elf_image(mm->elf_file);
 }
 
 static int copy_task_mmap(struct mm_struct *new,
@@ -399,12 +402,10 @@ err:
 	return -ENOMEM;
 }
 
-
-int task_mm_setup_meta_data(struct mm_struct *mm, void *callback[])
+int task_mm_setup_meta_data(struct task_struct *task, void *callback[])
 {
 	int i;
-	struct task_struct *task = container_of(mm,
-		struct task_struct, mm_struct);
+	struct mm_struct *mm = &task->mm_struct;
 	struct task_mm_section *section =
 		&mm->mm_section[TASK_MM_SECTION_META];
 	unsigned long base;
@@ -555,41 +556,27 @@ int init_mm_struct(struct task_struct *task)
 	int i, ret;
 	struct mm_struct *mm = &task->mm_struct;
 	struct mm_struct *mmp = &task->parent->mm_struct;
+	struct file *file;
 
 	if (task_is_kernel(task))
 		return 0;
 
-	/*
-	 * get the elf file's informaiton
-	 */
-	mm->elf_file = dup_elf_info(mmp->elf_file);
-	if (!mm->elf_file) {
-		struct file *file;
-
-		file = kernel_open(task->name, O_RDONLY);
-		if (!file)
-			return -ENOENT;
-
-		mm->elf_file = get_elf_info(file);
-		if (!mm->elf_file)
-			return -ENOMEM;
-
-		mm->elf_file->file = file;
+	if (mm->elf_file) {
+		release_elf_file(mm->elf_file);
+		mm->elf_file = NULL;
 	}
 
-	/* 
-	 * if new task's parent is started by exec  we need get
-	 * the information from the elf file, else copy
-	 * the information from the parent task.
-	 */
+	mm->elf_file = get_elf_info(task->name);
+	if (!mm->elf_file)
+		return -ENOMEM;
+
 	for (i = 0; i < TASK_MM_SECTION_MAX; i++) {
-		if (task->flag & _PROCESS_FLAG_USER_EXEC) {
+		if (task->flag & _PROCESS_FLAG_USER_EXEC)
 			init_task_mm_section(mm, i);
-		} else if (task->flag & _PROCESS_FLAG_KERN_EXEC) {
+		else if (task->flag & _PROCESS_FLAG_KERN_EXEC)
 			init_task_mm_section(mm, i);
-		} else {
+		else
 			copy_mm_section_info(mm, mmp, i);
-		}
 	}
 
 	ret = init_task_page_table(&mm->page_table);
@@ -610,4 +597,3 @@ int init_mm_struct(struct task_struct *task)
 
 	return 0;
 }
-
