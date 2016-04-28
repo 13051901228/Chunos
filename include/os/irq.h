@@ -6,16 +6,19 @@
 
 struct irq_des {
 	int (*fn)(void *arg);
-	void *arg;
+	void *arg;	
 };
 
 struct irq_chip	{
-	int irq_nr;
-	int (*enable_irq)(int nr, int flags);
+	unsigned int irq_nr;
+	void (*unmask)(unsigned int nr);
 	int (*get_irq_nr)(void);
-	int (*disable_irq)(int nr);
-	int (*clean_irq_pending)(int nr);
-	int (*irq_init)(struct irq_chip *chip);
+	void (*mask)(unsigned int nr);
+	void (*eoi)(unsigned int nr);
+	void (*init)(struct irq_chip *chip);
+	void (*set_affinity)(unsigned int irq, unsigned int affinity);
+	void (*setup)(unsigned int irq,
+			unsigned int vector, unsigned int affinity);
 };
 
 extern int in_interrupt;

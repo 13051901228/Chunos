@@ -64,8 +64,8 @@ static inline void early_xgold_usif_putc(char s)
 {
 	while ((ioread32(USIF_FIFO_STAT + usif1_base) & 0xff0000 ) >> 0x10);
 
-	iowrite32(1, USIF_FIFO_CTRL + usif1_base);
-	iowrite32(s, USIF_TXD + usif1_base);
+	iowrite32(USIF_FIFO_CTRL + usif1_base, 1);
+	iowrite32(USIF_TXD + usif1_base, s);
 }
 
 void xgold_uart_puts(char *str)
@@ -91,16 +91,16 @@ int __init_text sofia_init_uart_usif(unsigned long base, u32 baud)
 	if (!usif1_base)
 		return -ENOMEM;
 
-	iowrite32(0x00000aa6, usif1_base + USIF_CLC);
-	iowrite32(0x00000001, usif1_base + USIF_CLC_CNT);
-	iowrite32(0x10806, usif1_base + USIF_MODE_CFG);
-	iowrite32(0x8, usif1_base + USIF_PRTC_CFG);
-	iowrite32(0x0, usif1_base + USIF_IMSC);
-	iowrite32(0xffffffff, usif1_base + USIF_ICR);
-	iowrite32(0x5, usif1_base + USIF_BC_CFG);
-	iowrite32(0x01d00037, usif1_base + USIF_FDIV_CFG);
-	iowrite32(0x2200, usif1_base + USIF_FIFO_CFG);
-	iowrite32(0xaa5, usif1_base + USIF_CLC);
+	iowrite32(usif1_base + USIF_CLC, 0xaa6);
+	iowrite32(usif1_base + USIF_CLC_CNT, 0x01);
+	iowrite32(usif1_base + USIF_MODE_CFG, 0x10806);
+	iowrite32(usif1_base + USIF_PRTC_CFG, 0x8);
+	iowrite32(usif1_base + USIF_IMSC, 0x0);
+	iowrite32(usif1_base + USIF_ICR, 0xffffffff);
+	iowrite32(usif1_base + USIF_BC_CFG, 0x5);
+	iowrite32(usif1_base + USIF_FDIV_CFG, 0x1d00037);
+	iowrite32(usif1_base + USIF_FIFO_CFG, 0x2200);
+	iowrite32(usif1_base + USIF_CLC, 0xaa5);
 
 #if 0
 	iowrite32(0x0, usif1_base + USIF_DMAE);

@@ -38,14 +38,14 @@ void sofia_parse_memory_info(void)
 {
 }
 
-extern struct irq_chip ioapic;
+extern struct irq_chip x86_ioapic;
 extern struct mmu x86_mmu;
 
 static __init_data struct soc_platform sofia = {
 	.platform_id		= 0x636,
 	.system_clk_init	= sofia_clk_init,
 	.system_timer_init	= sofia_timer_init,
-	.irq_chip		= &ioapic,
+	.irq_chip		= &x86_ioapic,
 	.mmu			= &x86_mmu,
 	.init_action		= sofia_init_action,
 	.parse_memory_info	= sofia_parse_memory_info,

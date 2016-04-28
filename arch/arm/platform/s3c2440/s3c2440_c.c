@@ -95,11 +95,11 @@ int s3c2440_system_timer_init(u32 hz)
 		return -ENOMEM;
 	}
 	
-	iowrite32(249 << 8, timer_base + TCFG0);
-	iowrite32(0 << 16, timer_base+TCFG1);
-	iowrite16(64536, timer_base +TCNTB4);
-	iowrite32(1<<21, timer_base + TCON);
-	iowrite32(bit(20) | bit(22), timer_base + TCON);
+	iowrite32(timer_base + TCFG0, 249 << 8);
+	iowrite32(timer_base+TCFG1, 0 << 16);
+	iowrite16(timer_base +TCNTB4, 64536);
+	iowrite32(timer_base + TCON, 1 << 21);
+	iowrite32(timer_base + TCON, bit(20) | bit(22));
 
 	return 0;
 }
@@ -119,9 +119,9 @@ int s3c2440_irq_init(struct irq_chip *chip)
 	}
 
 	/* mask all interrupt,and set all int to irq mode */
-	iowrite32(0xffffffff,irq_base + INTMSK);
-	iowrite32(0xffffffff,irq_base + INTSUBMSK);
-	iowrite32(0, irq_base + INTMOD);
+	iowrite32(irq_base + INTMSK, 0xffffffff);
+	iowrite32(irq_base + INTSUBMSK, 0xffffffff);
+	iowrite32(irq_base + INTMOD, 0);
 
 	return 0;
 }
@@ -158,8 +158,8 @@ int s3c2440_do_enable_irq(int nr, int enable)
 		int_msk |= bit(nr);
 	}
 
-	iowrite32(int_msk, irq_base + INTMSK);
-	iowrite32(int_submsk, irq_base + INTSUBMSK);
+	iowrite32(irq_base + INTMSK, int_mask);
+	iowrite32(irq_base + INTSUBMSK, int_submask);
 	return 0;
 }
 
@@ -209,9 +209,9 @@ int s3c2440_clean_irq_pending(int nr)
 		src_pnd |= bit(nr);
 	}
 
-	iowrite32(subsrc_pnd, irq_base + SUBSRCPND);
-	iowrite32(src_pnd, irq_base + SRCPND);
-	iowrite32(src_pnd, irq_base + INTPND);
+	iowrite32(subsrc_pnirq_base + SUBSRCPND, subsrc_pnd);
+	iowrite32(irq_base + SRCPND, src_pnd);
+	iowrite32(irq_base + INTPND, src_pnd);
 
 	return 0;
 }
@@ -220,11 +220,11 @@ int s3c2440_uart0_init(int baud)
 {
 	u32 val = ((int)(PCLK /16. / baud + 0.5) - 1);
 
-	iowrite32(0x1, uart_base + UFCON0);
-	iowrite32(0x0, uart_base + UMCON0);
-	iowrite32(0x03, uart_base + ULCON0);
-	iowrite32(0x345, uart_base + UCON0);
-	iowrite32(val, uart_base + UBRDIV0);
+	iowrite32(uart_base + UFCON0, 0x1);
+	iowrite32(uart_base + UMCON0, 0x0);
+	iowrite32(uart_base + ULCON0, 0x03);
+	iowrite32(uart_base + UCON0, 0x345);
+	iowrite32(uart_base + UBRDIV0, val);
 
 	return 0;
 }
@@ -233,11 +233,11 @@ void platform_uart0_send_byte(u16 ch)
 {
 	if (ch == '\n') {
 //		while(!(ioread32(uart_base + UTRSTAT0) & 0x02));
-		iowrite8('\r', uart_base + UTXH0);
+		iowrite8(uart_base + UTXH0, '\r');
 	}
 
 //	while(!(ioread32(uart_base + UTRSTAT0) & 0x02));
-	iowrite8(ch, uart_base + UTXH0);
+	iowrite8(uart_base + UTXH0, ch);
 }
 
 int soc_console_early_init(int baud)

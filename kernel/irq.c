@@ -28,12 +28,12 @@ void disable_irqs(void)
 
 void enable_irq(int nr)
 {
-	irq_chip->enable_irq(nr, 0);
+	irq_chip->unmask(nr);
 }
 
 void disable_irq(int nr)
 {
-	irq_chip->disable_irq(nr);
+	irq_chip->mask(nr);
 }
 
 void inline enter_critical(unsigned long *val)
@@ -65,7 +65,7 @@ void free_irq(int nr)
 	if ((des) && (des->fn)) {
 		des->fn = NULL;
 		des->arg = NULL;
-		irq_chip->disable_irq(nr);
+		irq_chip->mask(nr);
 	}
 
 	exit_critical(&flags);
@@ -86,7 +86,7 @@ int register_irq(int nr, int (*fn)(void *arg), void *arg)
 	if ((des) && (des->fn == NULL)) {
 		des->fn = fn;
 		des->arg = arg;
-		irq_chip->enable_irq(nr, 0);
+		irq_chip->unmask(nr);
 		err = 0;
 	}
 
@@ -118,7 +118,7 @@ void irq_handler(void)
 	/* first get irq number, then clean irq pending */
 	nr = irq_chip->get_irq_nr();
 	do_irq_handler(nr);
-	irq_chip->clean_irq_pending(nr);
+	irq_chip->eoi(nr);
 
 	in_interrupt = 0;
 }
@@ -142,8 +142,8 @@ int irq_init(void)
 
 	if (platform->irq_chip) {
 		irq_chip = platform->irq_chip;
-		if (irq_chip->irq_init)
-			irq_chip->irq_init(irq_chip);
+		if (irq_chip->init)
+			irq_chip->init(irq_chip);
 	}
 	else {
 		panic("No irq chip found\n");

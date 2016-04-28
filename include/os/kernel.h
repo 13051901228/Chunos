@@ -12,6 +12,7 @@
 #include <os/task.h>
 #include <os/mm.h>
 #include <os/errno.h>
+#include <os/io.h>
 
 static inline void lock_kernel(void)
 {

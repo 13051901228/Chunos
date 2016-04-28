@@ -18,17 +18,17 @@ static inline u32 __raw_readl(const volatile void *addr)
 	return *(const volatile u32 *)addr;
 }
 
-static void __raw_writeb(u8 b, volatile void *addr)
+static void __raw_writeb(volatile void *addr, u8 b)
 {
 	*(volatile u8 *)addr = b;
 }
 
-static void __raw_writew(u16 w, volatile void *addr)
+static void __raw_writew(volatile void *addr, u16 w)
 {
 	*(volatile u16 *)addr = w;
 }
 
-static void __raw_writel(u32 l, volatile void *addr)
+static void __raw_writel(volatile void *addr, u32 l)
 {
 	*(volatile u32 *)addr = l;
 }
@@ -56,19 +56,19 @@ static inline u32 inl(unsigned long addr)
 	return readl((volatile u32 *)addr);
 }
 
-static inline void outb(u8 b, unsigned long addr)
+static inline void outb(unsigned long addr, u8 b)
 {
-	writeb(b,(volatile u8 *)addr);
+	writeb((volatile u8 *)addr, b);
 }
 
-static inline void outw(u16 w, unsigned long addr)
+static inline void outw(unsigned long addr, u16 w)
 {
-	writew(w,(volatile u16 *)addr);
+	writew((volatile u16 *)addr, w);
 }
 
-static inline void outl(u32 l, unsigned long addr)
+static inline void outl(unsigned long addr, u32 l)
 {
-	writel(l,(volatile u32 *)addr);
+	writel((volatile u32 *)addr, l);
 }
 
 /*
@@ -142,9 +142,9 @@ static inline void outsl(unsigned long addr, const void *buffer, int count)
 #define ioread16(addr)			readw((volatile void *)addr)
 #define ioread32(addr)			readl((volatile void *)addr)
 
-#define iowrite8(v, addr)		writeb((v), (volatile void *)(addr))
-#define iowrite16(v, addr)		writew((v), (volatile void *)(addr))
-#define iowrite32(v, addr)		writel((v), (volatile void *)(addr))
+#define iowrite8(addr, v)		writeb((volatile void *)(addr), (v))
+#define iowrite16(addr, v)		writew((volatile void *)(addr), (v))
+#define iowrite32(addr, v)		writel((volatile void *)(addr), (v))
 
 #define ioread8_rep(p, dst, count)	insb((unsigned long)(p), (dst), (count))
 #define ioread16_rep(p, dst, count)	insw((unsigned long)(p), (dst), (count))
